@@ -1,0 +1,82 @@
+# Dependencies
+node_modules/
+
+# Build output
+# dist/ is committed on purpose: OpenCode loads ./gui-experimental from the
+# installed package, so the bundle has to be present for github: installs.
+*.tsbuildinfo
+
+# Local history / session data
+.history/
+.sisyphus/
+.omo/
+
+# Environment & secrets
+.env
+.env.*
+*.log
+
+# OS / Editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Bun
+.bun/
+bun.lockb
+
+# Package manager config (machine-local registry/auth settings)
+.npmrc
+.yarnrc
+.yarnrc.yml
+*.tgz
+
+# Test artifacts
+coverage/
+*.lcov
+
+
+# OpenCode local project config (dev only)
+.opencode/
+
+# ============================================
+# Antigravity / agy / Google auth tokens & credentials
+# These contain your Gemini / agy access tokens.
+# NEVER commit them.
+# ============================================
+
+# Antigravity CLI main auth directory and files
+.antigravity/
+**/.antigravity/
+antigravity-accounts.json
+**/*antigravity*.json
+**/*agy*.json
+
+# Google Application Default Credentials (very common for agy)
+application_default_credentials.json
+**/application_default_credentials.json
+adc.json
+**/adc.json
+
+# Generic credential / token files (defense in depth)
+credentials*.json
+**/credentials*.json
+token*.json
+**/token*.json
+auth*.json
+**/auth*.json
+*token*.json
+*cred*.json
+
+# gcloud / Google Cloud config (if someone copies it into the repo)
+.gcloud/
+**/.gcloud/
+config/gcloud/
+
+# Google auth cache
+.google/
+**/.google/
+
+.cortexkit/*

@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e0f2fe"/>
+      <stop offset="70%" stop-color="#bae6fd"/>
+      <stop offset="100%" stop-color="#7dd3fc"/>
+    </linearGradient>
+    <linearGradient id="pouchGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#fb923c"/>
+      <stop offset="50%" stop-color="#f97316"/>
+      <stop offset="100%" stop-color="#ea580c"/>
+    </linearGradient>
+    <linearGradient id="beakTop" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#fde047"/>
+      <stop offset="80%" stop-color="#facc15"/>
+      <stop offset="100%" stop-color="#ef4444"/>
+    </linearGradient>
+    <linearGradient id="bodyGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="75%" stop-color="#f1f5f9"/>
+      <stop offset="100%" stop-color="#cbd5e1"/>
+    </linearGradient>
+    <linearGradient id="wingGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#e2e8f0"/>
+      <stop offset="60%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#475569"/>
+    </linearGradient>
+    <linearGradient id="woodGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#78350f"/>
+      <stop offset="40%" stop-color="#92400e"/>
+      <stop offset="100%" stop-color="#451a03"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="400" height="400" fill="url(#sky)"/>
+  <path d="M0 340 Q100 330 200 340 T400 335 L400 400 L0 400 Z" fill="#0284c7" opacity="0.5"/>
+  <path d="M0 355 Q120 345 240 355 T400 350 L400 400 L0 400 Z" fill="#0369a1" opacity="0.7"/>
+
+  <!-- Wooden Post -->
+  <rect x="135" y="330" width="75" height="70" rx="3" fill="url(#woodGrad)"/>
+  <ellipse cx="172.5" cy="330" rx="37.5" ry="6" fill="#b45309"/>
+  <path d="M150 336 L150 400 M175 336 L175 400 M195 336 L195 400" stroke="#451a03" stroke-width="1.5" opacity="0.5"/>
+
+  <!-- Back Leg (Left) -->
+  <g id="leg-left">
+    <path d="M162 265 L155 322" stroke="#ea580c" stroke-width="8" stroke-linecap="round"/>
+    <path d="M155 322 L138 332 L156 330 L168 333 Z" fill="#ea580c" stroke="#c2410c" stroke-width="1.5" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Front Leg (Right) -->
+  <g id="leg-right">
+    <path d="M188 268 L184 326" stroke="#f97316" stroke-width="9" stroke-linecap="round"/>
+    <path d="M184 326 L165 336 L186 335 L200 337 Z" fill="#f97316" stroke="#ea580c" stroke-width="1.5" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Tail Feathers -->
+  <path d="M98 222 L52 212 L64 228 L46 238 L75 246 L98 242 Z" fill="#64748b" stroke="#475569" stroke-width="1.5" stroke-linejoin="round"/>
+
+  <!-- Distinct Body & Neck -->
+  <path d="M210 105
+           C195 125 190 155 205 182
+           C232 212 238 258 202 274
+           C165 286 112 272 92 235
+           C76 205 98 172 135 168
+           C158 166 168 148 168 122
+           C168 95 168 72 188 65
+           C208 58 228 68 230 85
+           C232 96 220 102 210 105 Z"
+        fill="url(#bodyGrad)" stroke="#94a3b8" stroke-width="2"/>
+
+  <!-- Head Tuft Feathers -->
+  <path d="M182 67 L166 56 L176 72 L162 68 L173 79" fill="#e2e8f0" stroke="#94a3b8" stroke-width="1.5" stroke-linejoin="round"/>
+
+  <!-- Folded Wing on Body -->
+  <path d="M172 178
+           C132 174 102 192 98 220
+           C115 252 162 258 196 236
+           C210 227 205 182 172 178 Z"
+        fill="url(#wingGrad)" stroke="#475569" stroke-width="2"/>
+  <path d="M115 208 C135 215 165 215 188 205" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-linecap="round"/>
+  <path d="M108 222 C132 230 162 228 190 218" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-linecap="round"/>
+
+  <!-- Characteristic Throat Pouch -->
+  <path d="M225 96
+           L358 112
+           C354 168 310 218 252 210
+           C214 205 198 168 206 125
+           Z"
+        fill="url(#pouchGrad)" stroke="#c2410c" stroke-width="2" stroke-linejoin="round"/>
+  <!-- Pouch Texture Lines -->
+  <path d="M235 112 Q265 175 318 158" fill="none" stroke="#ea580c" stroke-width="2" stroke-linecap="round" opacity="0.65"/>
+  <path d="M218 128 Q248 188 292 182" fill="none" stroke="#c2410c" stroke-width="2" stroke-linecap="round" opacity="0.5"/>
+
+  <!-- Long Upper Beak -->
+  <path d="M224 78
+           L364 102
+           C371 104 372 114 363 118
+           L358 113
+           L222 98
+           Z"
+        fill="url(#beakTop)" stroke="#ca8a04" stroke-width="2" stroke-linejoin="round"/>
+
+  <!-- Eye (One Eye) -->
+  <g id="eye">
+    <circle cx="208" cy="82" r="9.5" fill="#fef08a" stroke="#94a3b8" stroke-width="1.5"/>
+    <circle cx="209" cy="82" r="5" fill="#0f172a"/>
+    <circle cx="207" cy="80" r="2" fill="#ffffff"/>
+  </g>
+</svg>

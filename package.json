@@ -1,0 +1,59 @@
+{
+  "name": "agy-opencode",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Google Antigravity (agy) for OpenCode: an agy tool, an OpenAI-compatible provider backed by the official CLI, and a desktop settings page for multiple Google accounts.",
+  "license": "MIT",
+  "author": "ShawnLi-code",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ShawnLi-code/agy-opencode.git"
+  },
+  "homepage": "https://github.com/ShawnLi-code/agy-opencode#readme",
+  "bugs": {
+    "url": "https://github.com/ShawnLi-code/agy-opencode/issues"
+  },
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "antigravity",
+    "agy",
+    "gemini",
+    "claude",
+    "llm-provider"
+  ],
+  "files": [
+    "src",
+    "dist",
+    "commands",
+    "skills",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./gui-experimental": "./dist/gui-experimental.cjs"
+  },
+  "scripts": {
+    "build": "vite build",
+    "watch": "vite build --watch",
+    "typecheck": "tsc --noEmit",
+    "check:gui": "node --conditions=browser scripts/render-check.mjs",
+    "check:protocol": "node scripts/provider-check.mjs",
+    "check:acp": "node scripts/acp-check.mjs",
+    "check:config": "node scripts/config-check.mjs",
+    "check": "npm run check:protocol && npm run check:gui",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@opencode/plugin": "2.2.5",
+    "effect": "^3.10.0",
+    "solid-js": "^1.9.0"
+  },
+  "devDependencies": {
+    "jsdom": "^31.0.0",
+    "typescript": "^5.8.2",
+    "vite": "^6.0.0",
+    "vite-plugin-solid": "^2.11.0"
+  }
+}

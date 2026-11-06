@@ -2,7 +2,7 @@
   "name": "agy-opencode",
   "version": "0.1.0",
   "type": "module",
-  "description": "Google Antigravity (agy) for OpenCode: an agy tool, an OpenAI-compatible provider backed by the official CLI, and a desktop settings page for multiple Google accounts.",
+  "description": "Google Antigravity (agy) for OpenCode: an OpenAI-compatible model provider backed by the official CLI, an optional agy tool, and a desktop settings page for multiple Google accounts.",
   "license": "MIT",
   "author": "ShawnLi-code",
   "repository": {

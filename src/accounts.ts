@@ -47,6 +47,12 @@ export interface Account {
   /** Last quota reading from the official CLI `/usage` command. */
   usage?: UsageRow[];
   usageCheckedAt?: number;
+  /** Why the last quota read failed (timeout, CLI error, ...). */
+  usageError?: string;
+  /** Google account email, decoded from the CLI's own id_token (no network). */
+  email?: string;
+  /** Display name from the id_token, when present. */
+  name?: string;
 }
 
 /** How the next account is chosen when several are enabled. */
@@ -208,6 +214,60 @@ export function accountEnv(account: Account): Record<string, string> {
   };
 }
 
+/** Where the official CLI keeps this account's OAuth token. */
+export function accountTokenPath(account: Account): string {
+  const base = account.home || homedir();
+  return join(base, ".gemini", "antigravity-cli", "antigravity-oauth-token");
+}
+
+export interface AccountIdentity {
+  email?: string;
+  name?: string;
+  /** A token file exists and carries an access token. */
+  loggedIn: boolean;
+  /** The token's own expiry is in the past. */
+  expired?: boolean;
+}
+
+/** Decodes a JWT payload without verifying it — the token is the CLI's own. */
+function jwtPayload(token: unknown): Record<string, any> | null {
+  if (typeof token !== "string") return null;
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+  try {
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    const json = Buffer.from(padded, "base64").toString("utf8");
+    const parsed = JSON.parse(json);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Reads the account's identity from the CLI's own token file. Local file read
+ * only: no network, no token reuse, nothing printed.
+ */
+export function readIdentity(account: Account): AccountIdentity {
+  const file = accountTokenPath(account);
+  if (!existsSync(file)) return { loggedIn: false };
+  try {
+    const data = JSON.parse(readFileSync(file, "utf8")) as any;
+    const access = data?.token?.access_token;
+    const payload = jwtPayload(data?.id_token) ?? jwtPayload(access);
+    const expiry = typeof data?.token?.expiry === "string" ? Date.parse(data.token.expiry) : NaN;
+    return {
+      email: typeof payload?.email === "string" ? payload.email : undefined,
+      name: typeof payload?.name === "string" ? payload.name : undefined,
+      loggedIn: typeof access === "string" && access.length > 0,
+      expired: Number.isFinite(expiry) ? expiry < Date.now() : undefined,
+    };
+  } catch {
+    return { loggedIn: false };
+  }
+}
+
 export interface ProbeResult {
   ok: boolean;
   models: string[];
@@ -215,6 +275,27 @@ export interface ProbeResult {
   claude: boolean;
   flash: boolean;
   error?: string;
+}
+
+/**
+ * Kills the CLI and anything it spawned. `shell: true` means the direct child is
+ * a shell on Windows, so `child.kill()` alone leaves `agy` running.
+ */
+function killTree(child: { pid?: number; kill: (signal?: any) => boolean }, signal?: any): void {
+  if (process.platform === "win32" && child.pid) {
+    try {
+      spawn("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
+        stdio: "ignore",
+        windowsHide: true,
+      });
+      return;
+    } catch {
+      /* fall through to kill() */
+    }
+  }
+  try {
+    child.kill(signal ?? "SIGKILL");
+  } catch {}
 }
 
 /** Runs `agy models` under an account and derives what it can actually use. */
@@ -239,9 +320,7 @@ export function probeAccount(account: Account, timeoutMs = 90_000): Promise<Prob
     }
 
     const timer = setTimeout(() => {
-      try {
-        child.kill();
-      } catch {}
+      killTree(child);
       finish({ ok: false, models: [], argon: false, claude: false, flash: false, error: "TIMEOUT" });
     }, timeoutMs);
 
@@ -289,7 +368,7 @@ export function probeAccount(account: Account, timeoutMs = 90_000): Promise<Prob
  * The command prints tab-separated rows:
  *   Gemini Models \t Weekly Limit Remaining \t 71% \t 2026-11-08T05:46:37Z
  */
-export function fetchUsage(account: Account, timeoutMs = 60_000): Promise<UsageRow[]> {
+export function fetchUsage(account: Account, timeoutMs = 30_000): Promise<UsageRow[]> {
   return new Promise((resolve, reject) => {
     const env = { ...process.env, ...accountEnv(account) } as Record<string, string>;
     let out = "";
@@ -305,9 +384,7 @@ export function fetchUsage(account: Account, timeoutMs = 60_000): Promise<UsageR
     }
 
     const timer = setTimeout(() => {
-      try {
-        child.kill();
-      } catch {}
+      killTree(child);
       if (!done) {
         done = true;
         reject(new Error("usage TIMEOUT"));

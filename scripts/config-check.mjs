@@ -117,7 +117,9 @@ if (existsSync(real)) {
   }
   check("last member: still valid JSON", ok, r.action);
   check("last member: agy-cli is the only provider", keys.length === 1 && keys[0] === "agy-cli", JSON.stringify(keys));
-  check("last member: no trailing comma before }", !/\},?\s*\n\s*\}/.test(after));
+  const rootClose = after.trimEnd().lastIndexOf("}");
+  const beforeClose = after.trimEnd().slice(0, rootClose).trimEnd().slice(-1);
+  check("last member: no trailing comma before }", beforeClose !== ",", beforeClose);
 }
 
 // ---------------------------------------------------------------- scenario 4
@@ -139,6 +141,65 @@ if (existsSync(real)) {
   check("port change: rewritten", r.changed === true);
   check("port change: new port applied", ok);
   check("port change: single block", blocks === 1, `${blocks} blocks`);
+}
+
+// ---------------------------------------------------------------- scenario 5
+// Plain .json (no comments allowed): an unmanaged agy-cli block whose timeouts
+// are `0` — opencode drops such a provider, which is how the models vanished
+// from the picker. It must be repaired in place, without markers and without
+// duplicating the key.
+{
+  const p = join(dir, "plain.json");
+  writeFileSync(
+    p,
+    JSON.stringify(
+      {
+        provider: {
+          "agy-cli": {
+            npm: "@ai-sdk/openai-compatible",
+            name: "Antigravity (CLI)",
+            options: {
+              baseURL: "http://127.0.0.1:4199/v1",
+              apiKey: "keep-me",
+              timeout: 0,
+              headerTimeout: 0,
+              chunkTimeout: 0,
+            },
+            models: { "argon-4-lo": { name: "Gemini 4 Argon (Low)" } },
+          },
+          magpie: { name: "Magpie" },
+        },
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+
+  ensureProviderConfig(5099, p);
+  const text = readFileSync(p, "utf8");
+  let j = null;
+  try {
+    j = JSON.parse(text);
+  } catch (e) {
+    check("plain json: still valid JSON", false, e.message.slice(0, 60));
+  }
+  if (j) {
+    const opts = j.provider["agy-cli"].options;
+    check("plain json: still valid JSON", true);
+    check("plain json: repaired in place", text.split('"agy-cli"').length - 1 === 1);
+    check("plain json: port applied", opts.baseURL.includes("5099"));
+    check("plain json: apiKey kept", opts.apiKey === "keep-me");
+    check(
+      "plain json: timeouts are positive integers",
+      [opts.timeout, opts.headerTimeout, opts.chunkTimeout].every((n) => Number.isInteger(n) && n > 0),
+      `${opts.timeout}/${opts.headerTimeout}/${opts.chunkTimeout}`,
+    );
+    check("plain json: neighbour provider kept", !!j.provider.magpie);
+    check("plain json: models rewritten", Object.keys(j.provider["agy-cli"].models).length === 13);
+  }
+  check("plain json: no managed markers", !text.includes("agy-opencode provider (managed)"));
+  check("plain json: idempotent", ensureProviderConfig(5099, p).changed === false);
 }
 
 const failed = results.filter((r) => !r.pass);

@@ -186,7 +186,7 @@ export default Plugin.define({
       id: "agy",
       title: "Antigravity",
       entries: [
-        { id: "agy.accounts", title: "Antigravity 账号", description: "多账号、默认档位、路由与用量" },
+        { id: "agy.accounts", title: "Antigravity 账号", description: "多账号、默认模型、路由与额度" },
         { id: "agy.add", title: "添加账号", description: "创建独立 HOME 并登录 Google" },
       ],
       render() {
@@ -196,10 +196,23 @@ export default Plugin.define({
         const [msg, setMsg] = createSignal("");
         const [picker, setPicker] = createSignal(false);
         const [now, setNow] = createSignal(Date.now());
+        const [elapsed, setElapsed] = createSignal(0);
         const [local, setLocal] = createStore<{ tier: string }>({ tier: "" });
 
         onMount(() => {
           const t = setInterval(() => setNow(Date.now()), 20_000);
+          onCleanup(() => clearInterval(t));
+        });
+
+        // Elapsed seconds while a quota read is in flight: `agy --print=/usage`
+        // can take a while, and a silent "读取中" looks like a hang.
+        createEffect(() => {
+          if (busy() !== "usage") {
+            setElapsed(0);
+            return;
+          }
+          const started = Date.now();
+          const t = setInterval(() => setElapsed(Math.floor((Date.now() - started) / 1000)), 1000);
           onCleanup(() => clearInterval(t));
         });
 
@@ -275,7 +288,9 @@ export default Plugin.define({
             setMsg(
               /no method/i.test(raw)
                 ? "需要重启一次 App：主进程的 IPC 方法只在启动时注册，热更新不会补上。"
-                : `失败：${raw.slice(0, 200)}`,
+                : /usage TIMEOUT/i.test(raw)
+                  ? "额度读取超时：官方 CLI 30 秒内没有返回（agy 无响应或网络慢），稍后再试。"
+                  : `失败：${raw.slice(0, 200)}`,
             );
           } finally {
             setBusy("");
@@ -287,8 +302,10 @@ export default Plugin.define({
             <div style={{ "margin-bottom": "22px" }}>
               <h1 style={{ "font-size": "16px", "font-weight": 600, margin: "0 0 6px" }}>Antigravity</h1>
               <p style={{ color: T.muted, margin: 0, "line-height": 1.55, "font-size": "12.5px" }}>
-                把 <code style={{ font: `11.5px ${T.mono}`, color: T.accent }}>agy</code> 当子 agent 调用。每个账号用独立
-                HOME 目录隔离凭证，互不影响。
+                把 Antigravity 接成 OpenCode 的模型供应商：在模型里选{" "}
+                <code style={{ font: `11.5px ${T.mono}`, color: T.accent }}>agy-cli</code> 就能直接当主模型用，
+                也可以用 <code style={{ font: `11.5px ${T.mono}`, color: T.accent }}>agy</code>{" "}
+                工具把任务交给它跑。每个账号用独立 HOME 目录隔离凭证，互不影响。
               </p>
             </div>
 
@@ -349,8 +366,23 @@ export default Plugin.define({
                                 </Show>
                               </div>
 
-                              <div style={{ color: T.faint, "font-size": "10.5px", font: `10.5px ${T.mono}`, "margin-top": "3px" }}>
-                                {acc.id}
+                              <div style={{ "margin-top": "4px", display: "flex", gap: "7px", "align-items": "center", "flex-wrap": "wrap" }}>
+                                <Show
+                                  when={acc.email}
+                                  fallback={
+                                    <span style={{ color: T.faint, "font-size": "11px" }}>
+                                      {acc.id === "system" ? "未读取到登录账号" : "未登录 · 点「登录」授权"}
+                                    </span>
+                                  }
+                                >
+                                  <span style={{ color: T.muted, font: `11.5px ${T.mono}` }}>{acc.email}</span>
+                                </Show>
+                                <Show when={acc.expired}>
+                                  <span style={{ color: T.yellow, "font-size": "10.5px" }}>登录已过期</span>
+                                </Show>
+                                <span style={{ color: T.faint, "font-size": "10px" }} title={acc.id}>
+                                  {acc.id}
+                                </span>
                               </div>
 
                               <div style={{ display: "flex", gap: "5px", "margin-top": "8px", "flex-wrap": "wrap" }}>
@@ -596,7 +628,7 @@ export default Plugin.define({
                       disabled={busy() === "usage"}
                       onClick={() => run("usage", () => client.usage({ id: data().activeAccountId }), "额度已刷新")}
                     >
-                      {busy() === "usage" ? "读取中" : "刷新"}
+                      {busy() === "usage" ? `读取中 ${elapsed()}s` : "刷新"}
                     </button>
                   </div>
 
@@ -604,8 +636,10 @@ export default Plugin.define({
                     <Show
                       when={activeUsage().length > 0}
                       fallback={
-                        <div style={{ padding: "14px", color: T.muted, "font-size": "11.5px" }}>
-                          {busy() === "usage" ? "正在向官方 CLI 读取…" : "暂无数据，点右上角「刷新」读取。"}
+                        <div style={{ padding: "14px", color: T.muted, "font-size": "11.5px", "line-height": 1.6 }}>
+                          {busy() === "usage"
+                            ? `正在向官方 CLI 读取… 已等待 ${elapsed()} 秒（最长 30 秒，超时会自动停止）`
+                            : "暂无数据，点右上角「刷新」读取。官方 CLI 首次读取通常要 10–30 秒。"}
                         </div>
                       }
                     >
@@ -661,8 +695,21 @@ export default Plugin.define({
                         )}
                       </For>
                     </Show>
+                    <Show when={activeAccount()?.usageError && busy() !== "usage"}>
+                      <div
+                        style={{
+                          padding: "10px 14px",
+                          "border-top": `1px solid ${T.border}`,
+                          color: T.yellow,
+                          "font-size": "11px",
+                          "line-height": 1.55,
+                        }}
+                      >
+                        上次读取失败：{activeAccount()!.usageError}
+                        <span style={{ color: T.faint }}> · 5 分钟内不会自动重试，可以点「刷新」手动重试。</span>
+                      </div>
+                    </Show>
                   </div>
-
                   <Show when={msg()}>
                     <div style={{ "margin-top": "14px", color: T.muted, "font-size": "11.5px" }}>{msg()}</div>
                   </Show>
@@ -680,12 +727,24 @@ export default Plugin.define({
 
     function snapshot() {
       const data = accounts.loadAccounts();
+      const enriched = data.accounts.map((a) => {
+        // Identity is a local file read (`id_token`), so it is always current
+        // and never depends on the slow `agy models` probe.
+        const ident = accounts.readIdentity(a);
+        return {
+          ...a,
+          email: ident.email ?? a.email,
+          name: ident.name ?? a.name,
+          loggedIn: ident.loggedIn,
+          expired: ident.expired === true,
+        };
+      });
       return {
         activeAccountId: data.activeAccountId,
         defaultTier: data.defaultTier,
         routing: data.routing,
         cooldownMs: data.cooldownMs,
-        accounts: data.accounts,
+        accounts: enriched,
       };
     }
 
@@ -710,6 +769,9 @@ export default Plugin.define({
           target.models = result.models;
           target.checkedAt = Date.now();
           target.error = result.ok ? undefined : result.error;
+          const ident = accounts.readIdentity(target);
+          target.email = ident.email ?? target.email;
+          target.name = ident.name ?? target.name;
           accounts.saveAccounts(next);
         }
         return accounts.loadAccounts().accounts.find((a) => a.id === id)!;
@@ -727,12 +789,27 @@ export default Plugin.define({
         const data = accounts.loadAccounts();
         const acc = data.accounts.find((a) => a.id === id);
         if (!acc) throw new Error(`账号不存在：${id}`);
-        const rows = await accounts.fetchUsage(acc);
+        let rows;
+        try {
+          rows = await accounts.fetchUsage(acc);
+        } catch (err: any) {
+          // Remember the failed attempt: otherwise every settings visit starts
+          // another 30-second CLI read.
+          const next = accounts.loadAccounts();
+          const target = next.accounts.find((a) => a.id === id);
+          if (target) {
+            target.usageCheckedAt = Date.now();
+            target.usageError = String(err?.message ?? err).slice(0, 200);
+            accounts.saveAccounts(next);
+          }
+          throw err;
+        }
         const next = accounts.loadAccounts();
         const target = next.accounts.find((a) => a.id === id);
         if (target) {
           target.usage = rows;
           target.usageCheckedAt = Date.now();
+          target.usageError = undefined;
           accounts.saveAccounts(next);
         }
         return accounts.loadAccounts().accounts.find((a) => a.id === id)!;

@@ -5,7 +5,7 @@ import { setupV2Plugin } from "./agy-v2";
 import { startProvider, type ProviderServer } from "./provider/server";
 import { runTier } from "./provider/run";
 import { registerProvider, PROVIDER_ID } from "./provider/register";
-import { readProviderPort } from "./provider/config-write";
+import { ensureProviderConfig, readProviderPort, type EnsureResult } from "./provider/config-write";
 
 /**
  * agy-opencode - server half.
@@ -72,9 +72,21 @@ export default {
     let diag: any = null;
     let reloadError: string | null = null;
 
-    // The picker reads providers from config. The block is already there and
-    // points at a fixed port; this plugin only *reads* that port so the bridge
-    // binds the same one. Nothing here ever writes the user's config.
+    // The picker reads providers from config. The plugin repairs that block so
+    // it always points at the live port and uses values the host accepts
+    // (`timeout: 0` used to make opencode drop the whole provider). The write is
+    // idempotent, backs the file up, and is skipped when nothing changed.
+    let configEnsure: EnsureResult | null = null;
+    if (bridge) {
+      try {
+        configEnsure = ensureProviderConfig(bridge.port);
+      } catch (err: any) {
+        configEnsure = { changed: false, path: "unknown", error: String(err?.message ?? err).slice(0, 200) };
+      }
+    }
+
+    // Nothing else in this plugin writes the user's config: the bridge only
+    // reads the port recorded there, and this block keeps it valid.
     const configuredPort = readProviderPort();
 
     if (bridge && typeof ctx?.provider?.transform === "function") {
@@ -108,6 +120,7 @@ export default {
     probe({
       bridge: bridge ? bridge.url : null,
       configuredPort,
+      configEnsure,
       bridgeError: startedError,
       registered,
       registerError,

@@ -2,9 +2,9 @@
 
 Google **Antigravity** (`agy`) inside [OpenCode](https://opencode.ai) — three things in one plugin:
 
-1. **`agy` tool** — delegate a scoped task to the Antigravity CLI as a headless sub-agent.
-2. **`Antigravity (CLI)` provider** — the agy models show up as selectable models and drive OpenCode's own tool loop.
-3. **Desktop settings page** — manage several Google accounts, pick a default tier, read real quota.
+1. **`Antigravity (CLI)` provider** — agy's models show up in the model picker and run OpenCode's own tool loop, so you can pick one as your main model.
+2. **`agy` tool** — hand a scoped task to the Antigravity CLI as a headless sub-agent (still useful for one-off bulk work).
+3. **Desktop settings page** — manage several Google accounts, see who each one is, pick a default tier, read real quota.
 
 Everything runs through the **official `agy` binary**. No OAuth token is reused, no private
 endpoint is called, so there is no account-ban surface beyond normal CLI use.
@@ -30,10 +30,10 @@ endpoint is called, so there is no account-ban surface beyond normal CLI use.
 }
 ```
 
-Then **add the provider to the same file**. This step is not optional: OpenCode's model
-picker only lists providers that come from configuration, so a plugin-registered provider
-never appears in it. Build the block with your own port, or copy this one and keep the two
-port numbers identical.
+Then **add the provider to the same file** (the plugin also repairs this block on
+startup, so it is usually enough to restart once). OpenCode's model picker only lists
+providers that come from configuration, so a plugin-registered provider never appears in it.
+Build the block with your own port, or copy this one and keep the two port numbers identical.
 
 ```jsonc
 "provider": {
@@ -43,10 +43,12 @@ port numbers identical.
     "options": {
       "baseURL": "http://127.0.0.1:4199/v1",
       "apiKey": "agy-cli-local",
-      // Turns run for minutes; default timeouts abort them.
-      "timeout": 0,
-      "headerTimeout": 0,
-      "chunkTimeout": 0
+      // Runs take minutes. These must be POSITIVE INTEGERS: opencode 2.2.x
+      // drops the whole provider when it sees `0` or `false`, and the models
+      // then vanish from the picker.
+      "timeout": 900000,
+      "headerTimeout": 900000,
+      "chunkTimeout": 900000
     },
     "models": {
       "argon-4-lo": { "name": "Gemini 4 Argon (Low)" },
@@ -67,8 +69,11 @@ port numbers identical.
 }
 ```
 
-Restart OpenCode. The bridge binds the port from that `baseURL`, so the plugin only ever
-**reads** your config — it never writes to it.
+Restart OpenCode. The bridge binds the port from that `baseURL`. On every start the plugin
+also **reads and repairs** that block (port, model list, valid timeout values), keeping a
+`.bak-agy-*` copy of any file it changes. If the block is missing and there is no `provider`
+object to insert it into, the settings page still works, but the picker will not list the
+models until you add it.
 
 ---
 
@@ -102,10 +107,14 @@ OpenCode  ──OpenAI protocol──▶  http://127.0.0.1:<port>/v1  ──ACP�
 Desktop app → **Settings → Antigravity**:
 
 - account list with Argon / Claude / Flash capability badges (probed with `agy models`)
+- **the Google account email** and sign-in state, decoded locally from the CLI's own
+  `antigravity-oauth-token` (no network, no token reuse)
 - add / remove accounts, start the Google sign-in flow per account
 - default tier, routing (`fixed` / `sequential` / `round-robin`), cooldown after a quota or
   auth failure
-- live usage counters, and **real quota** read with `agy --print=/usage`
+- live usage counters, and **real quota** read with `agy --print=/usage` (10–30 s on a good
+  day; the page shows elapsed seconds, stops at 30 s, and remembers a failed attempt for
+  5 minutes instead of retrying on every visit)
 
 ---
 
@@ -113,8 +122,9 @@ Desktop app → **Settings → Antigravity**:
 
 | Limit | Detail |
 |---|---|
-| Picker needs the config block | Plugin-registered providers are visible to the model API but not to the model picker. That is why the `provider` block above is required. |
-| No quota without the CLI | Percentages come from `agy --print=/usage`. There is no local cache; nothing is read from private endpoints. |
+| Picker needs the config block | Plugin-registered providers are visible to the model API but not to the model picker. The plugin writes/repairs the block above, but a restart is needed the first time. |
+| Timeout values must be integers | `timeout`/`headerTimeout`/`chunkTimeout` accept a positive integer only. `0` or `false` makes opencode drop the whole provider, silently removing the models from the picker. |
+| No quota without the CLI | Percentages come from `agy --print=/usage`. There is no local cache; nothing is read from private endpoints. A slow or offline `agy` means the read times out after 30 s. |
 | Slow on long answers | A 3000-character SVG took 35–70 s. Short turns are ~15 s. agy queues requests upstream, so timings vary a lot. |
 | Full-width context per turn (print mode) | Only when the ACP transport is unavailable: history is re-sent each turn. |
 | Text-only tool results | Tool output is replayed to the model as `[TOOL RESULT name=…]` text. Single-step tool use is verified; long multi-step chains are not. |

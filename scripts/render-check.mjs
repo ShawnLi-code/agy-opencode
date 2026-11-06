@@ -86,6 +86,8 @@ const STATE = {
         "gpt-oss-120b-medium",
       ],
       checkedAt: Date.now() - 3600e3,
+      email: "user@example.com",
+      loggedIn: true,
       usage: [
         { group: "Gemini Models", label: "Weekly Limit Remaining", percent: 71, resetAt: iso(2880) },
         { group: "Gemini Models", label: "Five Hour Limit Remaining", percent: 98, resetAt: iso(30) },
@@ -170,6 +172,7 @@ console.log("disabled buttons:", JSON.stringify(disabled));
 console.log("quota rows:", (text.match(/Limit Remaining|Argon Weekly Limit/g) || []).length);
 console.log("clipped by ancestor:", clippedBy ?? "no");
 console.log("alias rendered:", text.includes("系统账号"));
+console.log("email rendered:", text.includes("user@example.com"));
 
 let ok = true;
 const fail = (m) => {
@@ -179,6 +182,7 @@ const fail = (m) => {
 if (optionCount !== 13) fail(`expected 13 tier options, got ${optionCount}`);
 if (clippedBy) fail("dropdown is clipped by " + clippedBy);
 if (!text.includes("系统账号")) fail("account row missing");
+if (!text.includes("user@example.com")) fail("account email missing");
 if (!text.includes("Weekly Limit Remaining")) fail("quota rows missing");
 if (!text.includes("71%")) fail("quota percentage missing");
 if (!buttons.some((b) => b.includes("轮询"))) fail("routing buttons missing");

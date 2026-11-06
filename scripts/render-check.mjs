@@ -111,7 +111,9 @@ const client = {
   setRouting: async () => true,
   setCooldown: async () => true,
   clearCooldown: async () => true,
-  login: async () => true,
+  login: async () => ({ url: "https://accounts.google.com/o/oauth2/auth?demo=1" }),
+  loginCode: async () => ({ ok: true, email: "user@example.com" }),
+  loginCancel: async () => true,
 };
 
 let page = null;
@@ -187,6 +189,24 @@ if (!text.includes("Weekly Limit Remaining")) fail("quota rows missing");
 if (!text.includes("71%")) fail("quota percentage missing");
 if (!buttons.some((b) => b.includes("轮询"))) fail("routing buttons missing");
 if (disabled.length > 0) fail("unexpected disabled buttons: " + JSON.stringify(disabled));
+
+// Sign-in: clicking 登录 must show the OAuth link and a code field instead of
+// opening a browser with a fresh profile.
+const loginBtn = [...root.querySelectorAll("button")].find((b) => b.textContent.trim() === "登录");
+if (!loginBtn) {
+  fail("login button missing");
+} else {
+  loginBtn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 500));
+  const inputs = [...root.querySelectorAll("input")];
+  const afterLogin = root.textContent || "";
+  const hasLoginLink = inputs.some((i) => (i.value || "").includes("accounts.google.com"));
+  const hasCodeInput = inputs.some((i) => (i.getAttribute("placeholder") || "").includes("授权码"));
+  console.log("login link rendered:", hasLoginLink);
+  if (!hasLoginLink) fail("login link not shown");
+  if (!afterLogin.includes("完成登录")) fail("authorization-code step missing");
+  if (!hasCodeInput) fail("code input missing");
+}
 
 console.log(ok ? "\nRESULT: PASS" : "\nRESULT: FAIL");
 process.exit(ok ? 0 : 1);

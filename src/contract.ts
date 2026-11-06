@@ -38,8 +38,6 @@ export const AccountSchema = Effect.Schema.Struct({
   usageError: Effect.Schema.optional(Effect.Schema.String),
   email: Effect.Schema.optional(Effect.Schema.String),
   name: Effect.Schema.optional(Effect.Schema.String),
-  loggedIn: Effect.Schema.optional(Effect.Schema.Boolean),
-  expired: Effect.Schema.optional(Effect.Schema.Boolean),
 });
 
 export const StateSchema = Effect.Schema.Struct({

@@ -377,9 +377,6 @@ export default Plugin.define({
                                 >
                                   <span style={{ color: T.muted, font: `11.5px ${T.mono}` }}>{acc.email}</span>
                                 </Show>
-                                <Show when={acc.expired}>
-                                  <span style={{ color: T.yellow, "font-size": "10.5px" }}>登录已过期</span>
-                                </Show>
                                 <span style={{ color: T.faint, "font-size": "10px" }} title={acc.id}>
                                   {acc.id}
                                 </span>
@@ -735,8 +732,6 @@ export default Plugin.define({
           ...a,
           email: ident.email ?? a.email,
           name: ident.name ?? a.name,
-          loggedIn: ident.loggedIn,
-          expired: ident.expired === true,
         };
       });
       return {

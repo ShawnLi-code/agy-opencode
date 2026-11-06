@@ -14,7 +14,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { Account } from "../accounts";
+import { accountEnv, type Account } from "../accounts";
 
 interface Pending {
   resolve: (value: any) => void;
@@ -91,14 +91,7 @@ class AcpClient {
   constructor(private readonly account: Account) {}
 
   private env(): Record<string, string> {
-    const base: Record<string, string> = { ...process.env } as Record<string, string>;
-    if (this.account.home) {
-      base.HOME = this.account.home;
-      base.USERPROFILE = this.account.home;
-      base.APPDATA = `${this.account.home}\\AppData\\Roaming`;
-      base.LOCALAPPDATA = `${this.account.home}\\AppData\\Local`;
-    }
-    return base;
+    return { ...process.env, ...accountEnv(this.account) } as Record<string, string>;
   }
 
   start(): Promise<void> {

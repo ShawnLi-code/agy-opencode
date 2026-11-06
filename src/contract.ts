@@ -78,7 +78,25 @@ export const AgyAccounts = Ipc.define({
     clearCooldown: { input: Effect.Schema.Struct({ id: Effect.Schema.String }), output: Effect.Schema.Boolean },
     /** Reset the local usage counters for an account. */
     resetUsage: { input: Effect.Schema.Struct({ id: Effect.Schema.String }), output: Effect.Schema.Boolean },
-    /** Open the Google sign-in flow for an account (runs `agy acp --login` in it). */
-    login: { input: Effect.Schema.Struct({ id: Effect.Schema.String }), output: Effect.Schema.Boolean },
+    /**
+     * Start Google sign-in for an account. Returns the OAuth URL the CLI prints;
+     * no browser is launched, so the user can open it in whichever browser is
+     * already signed in.
+     */
+    login: {
+      input: Effect.Schema.Struct({ id: Effect.Schema.String }),
+      output: Effect.Schema.Struct({ url: Effect.Schema.String }),
+    },
+    /** Hand the pasted authorization code (or redirect URL) back to the CLI. */
+    loginCode: {
+      input: Effect.Schema.Struct({ id: Effect.Schema.String, code: Effect.Schema.String }),
+      output: Effect.Schema.Struct({
+        ok: Effect.Schema.Boolean,
+        email: Effect.Schema.optional(Effect.Schema.String),
+        error: Effect.Schema.optional(Effect.Schema.String),
+      }),
+    },
+    /** Abandon an in-flight sign-in and stop the waiting CLI process. */
+    loginCancel: { input: Effect.Schema.Struct({ id: Effect.Schema.String }), output: Effect.Schema.Boolean },
   },
 });

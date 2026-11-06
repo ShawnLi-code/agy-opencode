@@ -197,6 +197,11 @@ export default Plugin.define({
         const [picker, setPicker] = createSignal(false);
         const [now, setNow] = createSignal(Date.now());
         const [elapsed, setElapsed] = createSignal(0);
+        const [loginFor, setLoginFor] = createSignal("");
+        const [loginUrl, setLoginUrl] = createSignal("");
+        const [loginCode, setLoginCode] = createSignal("");
+        const [loginError, setLoginError] = createSignal("");
+        const [loginCopied, setLoginCopied] = createSignal(false);
         const [local, setLocal] = createStore<{ tier: string }>({ tier: "" });
 
         onMount(() => {
@@ -296,6 +301,85 @@ export default Plugin.define({
             setBusy("");
           }
         }
+
+        // ---- Google sign-in -------------------------------------------------
+        // The CLI prints an OAuth link and waits for the pasted code. We show
+        // that link instead of letting agy pick a browser: the user can open it
+        // in the browser profile that is already signed in (ego, Chrome, ...).
+        async function startLogin(id: string) {
+          if (busy()) return;
+          setBusy(`login-${id}`);
+          setMsg("");
+          setLoginError("");
+          try {
+            const { url } = await client.login({ id });
+            setLoginFor(id);
+            setLoginUrl(url);
+            setLoginCode("");
+            setLoginCopied(false);
+          } catch (e: any) {
+            setMsg(`无法启动登录：${String(e?.message ?? e).slice(0, 200)}`);
+          } finally {
+            setBusy("");
+          }
+        }
+
+        async function copyLoginUrl() {
+          try {
+            await navigator.clipboard.writeText(loginUrl());
+            setLoginCopied(true);
+            setTimeout(() => setLoginCopied(false), 1500);
+          } catch {
+            setLoginError("复制失败：请手动选中链接复制。");
+          }
+        }
+
+        async function submitLoginCode() {
+          const id = loginFor();
+          if (!id) return;
+          const code = loginCode().trim();
+          if (!code) {
+            setLoginError("请先粘贴授权码或回调页面的完整地址。");
+            return;
+          }
+          setBusy(`code-${id}`);
+          setLoginError("");
+          try {
+            const result = await client.loginCode({ id, code });
+            if (!result.ok) {
+              setLoginError(result.error ?? "登录失败，请重新复制链接后再试。");
+              return;
+            }
+            setLoginFor("");
+            setLoginUrl("");
+            setLoginCode("");
+            setMsg(`登录成功${result.email ? `：${result.email}` : ""}`);
+            await refetch();
+          } catch (e: any) {
+            setLoginError(String(e?.message ?? e).slice(0, 300));
+          } finally {
+            setBusy("");
+          }
+        }
+
+        async function cancelLogin() {
+          const id = loginFor();
+          setLoginFor("");
+          setLoginUrl("");
+          setLoginCode("");
+          setLoginError("");
+          if (!id) return;
+          try {
+            await client.loginCancel({ id });
+          } catch {
+            /* the CLI may already be gone */
+          }
+        }
+
+        const loginAlias = createMemo(() => {
+          const id = loginFor();
+          return state()?.accounts.find((a) => a.id === id)?.alias ?? id;
+        });
 
         return (
           <div style={{ padding: "22px 26px 40px", color: T.base, "font-size": "13px", "max-width": "900px" }}>
@@ -407,17 +491,13 @@ export default Plugin.define({
                               >
                                 {busy() === acc.id ? "探测中" : "探测"}
                               </button>
-                              <Show when={acc.home}>
-                                <button
-                                  style={btnStyle()}
-                                  disabled={busy() === `login-${acc.id}`}
-                                  onClick={() =>
-                                    run(`login-${acc.id}`, () => client.login({ id: acc.id }), "已打开浏览器授权")
-                                  }
-                                >
-                                  登录
-                                </button>
-                              </Show>
+                              <button
+                                style={btnStyle()}
+                                disabled={busy() === `login-${acc.id}`}
+                                onClick={() => void startLogin(acc.id)}
+                              >
+                                {busy() === `login-${acc.id}` ? "准备中" : "登录"}
+                              </button>
                               <Show when={cooling}>
                                 <button
                                   style={btnStyle()}
@@ -477,6 +557,96 @@ export default Plugin.define({
                       添加账号
                     </button>
                   </div>
+
+                  {/* ---------------- Google 登录 ---------------- */}
+                  <Show when={loginFor()}>
+                    <div style={{ ...card, "margin-top": "12px", overflow: "hidden" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          "align-items": "center",
+                          "justify-content": "space-between",
+                          gap: "12px",
+                          padding: "12px 14px",
+                          background: T.layer2,
+                        }}
+                      >
+                        <div>
+                          <div style={{ "font-size": "12.5px" }}>登录「{loginAlias()}」</div>
+                          <div style={{ color: T.faint, "font-size": "11px", "margin-top": "2px" }}>
+                            不会自动弹浏览器：请在你已经登录 Google 的浏览器里打开下面的链接
+                          </div>
+                        </div>
+                        <button style={btnStyle()} onClick={() => void cancelLogin()}>
+                          取消
+                        </button>
+                      </div>
+                      <div style={{ padding: "12px 14px" }}>
+                        <div style={{ display: "flex", gap: "8px" }}>
+                          <input
+                            readonly
+                            value={loginUrl()}
+                            onFocus={(e) => e.currentTarget.select()}
+                            style={{
+                              flex: "1",
+                              "min-width": 0,
+                              font: `11px ${T.mono}`,
+                              padding: "6px 9px",
+                              "border-radius": "6px",
+                              border: `1px solid ${T.border}`,
+                              background: T.layer1,
+                              color: T.muted,
+                              outline: "none",
+                            }}
+                          />
+                          <button style={btnStyle("primary")} onClick={() => void copyLoginUrl()}>
+                            {loginCopied() ? "已复制" : "复制链接"}
+                          </button>
+                        </div>
+                        <div style={{ color: T.weak, "font-size": "11.5px", "line-height": 1.7, "margin-top": "10px" }}>
+                          1. 打开链接，完成 Google 授权。
+                          <br />
+                          2. 把浏览器地址栏里的<b>完整地址</b>，或页面显示的<b>授权码</b>，粘到下面。
+                        </div>
+                        <div style={{ display: "flex", gap: "8px", "margin-top": "8px" }}>
+                          <input
+                            placeholder="粘贴授权码或回调页面地址"
+                            value={loginCode()}
+                            onInput={(e) => setLoginCode(e.currentTarget.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") void submitLoginCode();
+                            }}
+                            style={{
+                              flex: "1",
+                              "min-width": 0,
+                              "font-size": "12px",
+                              padding: "6px 10px",
+                              "border-radius": "6px",
+                              border: `1px solid ${T.border}`,
+                              background: T.layer1,
+                              color: T.base,
+                              outline: "none",
+                            }}
+                          />
+                          <button
+                            style={btnStyle("primary")}
+                            disabled={busy() === `code-${loginFor()}`}
+                            onClick={() => void submitLoginCode()}
+                          >
+                            {busy() === `code-${loginFor()}` ? "校验中" : "完成登录"}
+                          </button>
+                        </div>
+                        <Show when={loginError()}>
+                          <div style={{ color: T.yellow, "font-size": "11.5px", "margin-top": "8px", "line-height": 1.6 }}>
+                            {loginError()}
+                          </div>
+                        </Show>
+                        <div style={{ color: T.faint, "font-size": "10.5px", "margin-top": "10px", "line-height": 1.6 }}>
+                          额外账号把 token 存在自己的 HOME 里（不走系统钥匙串），不会覆盖系统账号的登录。
+                        </div>
+                      </div>
+                    </div>
+                  </Show>
 
                   {/* ---------------- 调用设置 ---------------- */}
                   <div style={{ ...label, "margin-top": "26px" }}>调用设置</div>
@@ -722,6 +892,32 @@ export default Plugin.define({
   async main(ctx) {
     const accounts = await import("./accounts");
 
+    type LoginSession = { child: any; output: string; timer: ReturnType<typeof setTimeout> };
+    const logins = new Map<string, LoginSession>();
+
+    function stopLogin(id: string): void {
+      const session = logins.get(id);
+      if (!session) return;
+      clearTimeout(session.timer);
+      try {
+        session.child.stdin?.end();
+      } catch {
+        /* already closed */
+      }
+      try {
+        session.child.kill();
+      } catch {
+        /* already gone */
+      }
+      logins.delete(id);
+    }
+
+    /** The CLI prints the Google OAuth link before waiting for the code. */
+    function authUrlOf(text: string): string | null {
+      const match = text.match(/https:\/\/accounts\.google\.com\/[^\s"'<>]+/);
+      return match ? match[0] : null;
+    }
+
     function snapshot() {
       const data = accounts.loadAccounts();
       const enriched = data.accounts.map((a) => {
@@ -856,17 +1052,107 @@ export default Plugin.define({
       login: async ({ id }) => {
         const data = accounts.loadAccounts();
         const acc = data.accounts.find((a) => a.id === id);
-        if (!acc) return false;
+        if (!acc) throw new Error(`账号不存在：${id}`);
+
+        stopLogin(id);
         const { spawn } = await import("node:child_process");
         const env = { ...process.env, ...accounts.accountEnv(acc) } as Record<string, string>;
         const child = spawn("agy", ["acp", "--login"], {
           env,
-          detached: true,
-          stdio: "ignore",
+          stdio: ["pipe", "pipe", "pipe"],
           shell: true,
           windowsHide: true,
         });
-        child.unref();
+
+        const session: LoginSession = {
+          child,
+          output: "",
+          timer: setTimeout(() => stopLogin(id), 10 * 60 * 1000),
+        };
+        logins.set(id, session);
+
+        return new Promise<{ url: string }>((resolve, reject) => {
+          let settled = false;
+          const finish = (fn: () => void) => {
+            if (settled) return;
+            settled = true;
+            fn();
+          };
+
+          const onData = (chunk: Buffer) => {
+            session.output += chunk.toString("utf8");
+            const url = authUrlOf(session.output);
+            if (url) finish(() => resolve({ url }));
+          };
+
+          child.stdout?.on("data", onData);
+          child.stderr?.on("data", onData);
+          child.on("error", (err) => finish(() => {
+            stopLogin(id);
+            reject(err);
+          }));
+          child.on("exit", () => finish(() => {
+            const url = authUrlOf(session.output);
+            if (url) {
+              resolve({ url });
+              return;
+            }
+            stopLogin(id);
+            reject(new Error(`agy 没有返回登录链接：${session.output.trim().slice(0, 200) || "无输出"}`));
+          }));
+
+          setTimeout(() => finish(() => {
+            stopLogin(id);
+            reject(new Error("等待登录链接超时（20 秒）"));
+          }), 20_000);
+        });
+      },
+
+      loginCode: async ({ id, code }) => {
+        const session = logins.get(id);
+        if (!session) return { ok: false, error: "没有进行中的登录，请先点账号上的「登录」。" };
+
+        const value = code.trim();
+        if (!value) return { ok: false, error: "请先粘贴授权码或回调页面地址。" };
+
+        const exitCode = await new Promise<number | null>((resolve) => {
+          const timer = setTimeout(() => resolve(null), 60_000);
+          session.child.once("exit", (code) => {
+            clearTimeout(timer);
+            resolve(typeof code === "number" ? code : 1);
+          });
+          try {
+            session.child.stdin?.write(`${value}\n`);
+          } catch {
+            clearTimeout(timer);
+            resolve(1);
+          }
+        });
+
+        const output = session.output;
+        stopLogin(id);
+
+        if (exitCode === null) return { ok: false, error: "等待 Google 校验超时（60 秒），请重新点「登录」。" };
+        if (exitCode !== 0) {
+          const last = output.trim().split(/\r?\n/).filter(Boolean).pop();
+          return { ok: false, error: (last ?? "登录失败，请重新复制链接后再试。").slice(0, 300) };
+        }
+
+        const next = accounts.loadAccounts();
+        const target = next.accounts.find((a) => a.id === id);
+        if (target) {
+          const ident = accounts.readIdentity(target);
+          target.email = ident.email ?? target.email;
+          target.name = ident.name ?? target.name;
+          target.checkedAt = Date.now();
+          accounts.saveAccounts(next);
+        }
+        const email = accounts.loadAccounts().accounts.find((a) => a.id === id)?.email;
+        return { ok: true, email };
+      },
+
+      loginCancel: async ({ id }) => {
+        stopLogin(id);
         return true;
       },
     });

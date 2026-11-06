@@ -112,11 +112,29 @@ const AgyAccounts = gui$1.Ipc.define({
     clearCooldown: { input: Effect__namespace.Schema.Struct({ id: Effect__namespace.Schema.String }), output: Effect__namespace.Schema.Boolean },
     /** Reset the local usage counters for an account. */
     resetUsage: { input: Effect__namespace.Schema.Struct({ id: Effect__namespace.Schema.String }), output: Effect__namespace.Schema.Boolean },
-    /** Open the Google sign-in flow for an account (runs `agy acp --login` in it). */
-    login: { input: Effect__namespace.Schema.Struct({ id: Effect__namespace.Schema.String }), output: Effect__namespace.Schema.Boolean }
+    /**
+     * Start Google sign-in for an account. Returns the OAuth URL the CLI prints;
+     * no browser is launched, so the user can open it in whichever browser is
+     * already signed in.
+     */
+    login: {
+      input: Effect__namespace.Schema.Struct({ id: Effect__namespace.Schema.String }),
+      output: Effect__namespace.Schema.Struct({ url: Effect__namespace.Schema.String })
+    },
+    /** Hand the pasted authorization code (or redirect URL) back to the CLI. */
+    loginCode: {
+      input: Effect__namespace.Schema.Struct({ id: Effect__namespace.Schema.String, code: Effect__namespace.Schema.String }),
+      output: Effect__namespace.Schema.Struct({
+        ok: Effect__namespace.Schema.Boolean,
+        email: Effect__namespace.Schema.optional(Effect__namespace.Schema.String),
+        error: Effect__namespace.Schema.optional(Effect__namespace.Schema.String)
+      })
+    },
+    /** Abandon an in-flight sign-in and stop the waiting CLI process. */
+    loginCancel: { input: Effect__namespace.Schema.Struct({ id: Effect__namespace.Schema.String }), output: Effect__namespace.Schema.Boolean }
   }
 });
-var _tmpl$ = /* @__PURE__ */ web.template(`<span style="font-size:11px;line-height:18px;padding:0 7px;border-radius:5px">`), _tmpl$2 = /* @__PURE__ */ web.template(`<div style=margin-bottom:14px;font-size:12px>读取失败：`), _tmpl$3 = /* @__PURE__ */ web.template(`<div style="padding:22px 26px 40px;font-size:13px;max-width:900px"><div style=margin-bottom:22px><h1 style="font-size:16px;font-weight:600;margin:0 0 6px">Antigravity</h1><p style=margin:0;line-height:1.55;font-size:12.5px>把 Antigravity 接成 OpenCode 的模型供应商：在模型里选 <code>agy-cli</code> 就能直接当主模型用， 也可以用 <code>agy</code> 工具把任务交给它跑。每个账号用独立 HOME 目录隔离凭证，互不影响。`), _tmpl$4 = /* @__PURE__ */ web.template(`<div style=margin-top:26px>账号`), _tmpl$5 = /* @__PURE__ */ web.template(`<div>`), _tmpl$6 = /* @__PURE__ */ web.template(`<div style=display:flex;gap:8px;margin-top:10px><input placeholder="新账号备注，例如「备用 Google 账号」"style="flex:1;font-size:12px;padding:6px 10px;border-radius:6px;outline:none"><button>添加账号`), _tmpl$7 = /* @__PURE__ */ web.template(`<div style=margin-top:26px>调用设置`), _tmpl$8 = /* @__PURE__ */ web.template(`<div style="position:absolute;top:calc(100% + 6px);left:0;z-index:50;min-width:260px;max-height:320px;overflow-y:auto;background:var(--v2-background-bg-base, #16191f);border-radius:8px;box-shadow:0 12px 32px rgba(0,0,0,0.5);padding:6px">`), _tmpl$9 = /* @__PURE__ */ web.template(`<div><div style=border-top:none><div><div style=font-size:12.5px>默认档位</div><div style=font-size:11px;margin-top:2px>未指定 tier 时使用</div></div><div style=position:relative;justify-self:start><button style=min-width:250px;text-align:left> </button></div></div><div><div><div style=font-size:12.5px>路由策略</div><div style=font-size:11px;margin-top:2px></div></div><div style=display:flex;gap:4px;justify-self:start></div></div><div><div><div style=font-size:12.5px>冷却时长</div><div style=font-size:11px;margin-top:2px>配额或未授权时暂停该账号</div></div><div style=display:flex;align-items:center;gap:8px;justify-self:start><input type=number min=1 max=240 style="width:64px;font-size:12px;padding:5px 8px;border-radius:6px;outline:none"><span style=font-size:11.5px>分钟`), _tmpl$0 = /* @__PURE__ */ web.template(`<div style=margin-top:26px;display:flex;align-items:center;justify-content:space-between><span>额度<span style=margin-left:8px;font-size:11px>来自 <code>agy --print=/usage</code></span></span><button>`), _tmpl$1 = /* @__PURE__ */ web.template(`<div style="padding:10px 14px;font-size:11px;line-height:1.55">上次读取失败：<span> · 5 分钟内不会自动重试，可以点「刷新」手动重试。`), _tmpl$10 = /* @__PURE__ */ web.template(`<div style=margin-top:14px;font-size:11.5px>`), _tmpl$11 = /* @__PURE__ */ web.template(`<span style=font-size:10.5px;flex-shrink:0>默认`), _tmpl$12 = /* @__PURE__ */ web.template(`<span style=font-size:11px;flex-shrink:0>冷却剩 <!> 分`), _tmpl$13 = /* @__PURE__ */ web.template(`<span>`), _tmpl$14 = /* @__PURE__ */ web.template(`<span> · 探测 `), _tmpl$15 = /* @__PURE__ */ web.template(`<span> · 上次 `), _tmpl$16 = /* @__PURE__ */ web.template(`<button>登录`), _tmpl$17 = /* @__PURE__ */ web.template(`<button>解除`), _tmpl$18 = /* @__PURE__ */ web.template(`<button>设为默认`), _tmpl$19 = /* @__PURE__ */ web.template(`<button>删除`), _tmpl$20 = /* @__PURE__ */ web.template(`<div style="display:flex;align-items:flex-start;gap:14px;padding:12px 14px"><div style=min-width:0;flex:1><div style=display:flex;align-items:baseline;gap:8px;min-width:0><span style=width:6px;height:6px;border-radius:50%;flex-shrink:0;transform:translateY(-2px)></span><span style=font-weight:500;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis></span></div><div style=margin-top:4px;display:flex;gap:7px;align-items:center;flex-wrap:wrap><span style=font-size:10px></span></div><div style=display:flex;gap:5px;margin-top:8px;flex-wrap:wrap></div><div style=margin-top:8px;font-size:11.5px;line-height:1.5>调用 <!> · 失败 <!> · 最近 </div></div><div style=display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;max-width:210px><button>`), _tmpl$21 = /* @__PURE__ */ web.template(`<span style=font-size:11px>`), _tmpl$22 = /* @__PURE__ */ web.template(`<div style="padding:7px 8px 3px;font-size:10.5px;letter-spacing:0.03em">`), _tmpl$23 = /* @__PURE__ */ web.template(`<span>✓`), _tmpl$24 = /* @__PURE__ */ web.template(`<div style="display:flex;justify-content:space-between;padding:5px 8px;border-radius:5px;cursor:pointer;font-size:12px"><span>`), _tmpl$25 = /* @__PURE__ */ web.template(`<button>`), _tmpl$26 = /* @__PURE__ */ web.template(`<div style=padding:14px;font-size:11.5px;line-height:1.6>`), _tmpl$27 = /* @__PURE__ */ web.template(`<div style="display:grid;grid-template-columns:minmax(180px, 260px) 1fr;align-items:center;gap:16px;padding:10px 14px"><div><div style=font-size:12.5px></div><div style=font-size:11px;margin-top:2px> · </div></div><div style=display:flex;align-items:center;gap:10px><div style=flex:1;height:6px;border-radius:3px;overflow:hidden><div style=height:100%></div></div><span style=width:40px;text-align:right;font-size:12px>%`);
+var _tmpl$ = /* @__PURE__ */ web.template(`<span style="font-size:11px;line-height:18px;padding:0 7px;border-radius:5px">`), _tmpl$2 = /* @__PURE__ */ web.template(`<div style=margin-bottom:14px;font-size:12px>读取失败：`), _tmpl$3 = /* @__PURE__ */ web.template(`<div style="padding:22px 26px 40px;font-size:13px;max-width:900px"><div style=margin-bottom:22px><h1 style="font-size:16px;font-weight:600;margin:0 0 6px">Antigravity</h1><p style=margin:0;line-height:1.55;font-size:12.5px>把 Antigravity 接成 OpenCode 的模型供应商：在模型里选 <code>agy-cli</code> 就能直接当主模型用， 也可以用 <code>agy</code> 工具把任务交给它跑。每个账号用独立 HOME 目录隔离凭证，互不影响。`), _tmpl$4 = /* @__PURE__ */ web.template(`<div style=margin-top:26px>账号`), _tmpl$5 = /* @__PURE__ */ web.template(`<div>`), _tmpl$6 = /* @__PURE__ */ web.template(`<div style=display:flex;gap:8px;margin-top:10px><input placeholder="新账号备注，例如「备用 Google 账号」"style="flex:1;font-size:12px;padding:6px 10px;border-radius:6px;outline:none"><button>添加账号`), _tmpl$7 = /* @__PURE__ */ web.template(`<div style=font-size:11.5px;margin-top:8px;line-height:1.6>`), _tmpl$8 = /* @__PURE__ */ web.template(`<div style=margin-top:12px;overflow:hidden><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px"><div><div style=font-size:12.5px>登录「<!>」</div><div style=font-size:11px;margin-top:2px>不会自动弹浏览器：请在你已经登录 Google 的浏览器里打开下面的链接</div></div><button>取消</button></div><div style="padding:12px 14px"><div style=display:flex;gap:8px><input readonly style="flex:1;min-width:0;padding:6px 9px;border-radius:6px;outline:none"><button></button></div><div style=font-size:11.5px;line-height:1.7;margin-top:10px>1. 打开链接，完成 Google 授权。<br>2. 把浏览器地址栏里的<b>完整地址</b>，或页面显示的<b>授权码</b>，粘到下面。</div><div style=display:flex;gap:8px;margin-top:8px><input placeholder=粘贴授权码或回调页面地址 style="flex:1;min-width:0;font-size:12px;padding:6px 10px;border-radius:6px;outline:none"><button></button></div><div style=font-size:10.5px;margin-top:10px;line-height:1.6>额外账号把 token 存在自己的 HOME 里（不走系统钥匙串），不会覆盖系统账号的登录。`), _tmpl$9 = /* @__PURE__ */ web.template(`<div style=margin-top:26px>调用设置`), _tmpl$0 = /* @__PURE__ */ web.template(`<div style="position:absolute;top:calc(100% + 6px);left:0;z-index:50;min-width:260px;max-height:320px;overflow-y:auto;background:var(--v2-background-bg-base, #16191f);border-radius:8px;box-shadow:0 12px 32px rgba(0,0,0,0.5);padding:6px">`), _tmpl$1 = /* @__PURE__ */ web.template(`<div><div style=border-top:none><div><div style=font-size:12.5px>默认档位</div><div style=font-size:11px;margin-top:2px>未指定 tier 时使用</div></div><div style=position:relative;justify-self:start><button style=min-width:250px;text-align:left> </button></div></div><div><div><div style=font-size:12.5px>路由策略</div><div style=font-size:11px;margin-top:2px></div></div><div style=display:flex;gap:4px;justify-self:start></div></div><div><div><div style=font-size:12.5px>冷却时长</div><div style=font-size:11px;margin-top:2px>配额或未授权时暂停该账号</div></div><div style=display:flex;align-items:center;gap:8px;justify-self:start><input type=number min=1 max=240 style="width:64px;font-size:12px;padding:5px 8px;border-radius:6px;outline:none"><span style=font-size:11.5px>分钟`), _tmpl$10 = /* @__PURE__ */ web.template(`<div style=margin-top:26px;display:flex;align-items:center;justify-content:space-between><span>额度<span style=margin-left:8px;font-size:11px>来自 <code>agy --print=/usage</code></span></span><button>`), _tmpl$11 = /* @__PURE__ */ web.template(`<div style="padding:10px 14px;font-size:11px;line-height:1.55">上次读取失败：<span> · 5 分钟内不会自动重试，可以点「刷新」手动重试。`), _tmpl$12 = /* @__PURE__ */ web.template(`<div style=margin-top:14px;font-size:11.5px>`), _tmpl$13 = /* @__PURE__ */ web.template(`<span style=font-size:10.5px;flex-shrink:0>默认`), _tmpl$14 = /* @__PURE__ */ web.template(`<span style=font-size:11px;flex-shrink:0>冷却剩 <!> 分`), _tmpl$15 = /* @__PURE__ */ web.template(`<span>`), _tmpl$16 = /* @__PURE__ */ web.template(`<span> · 探测 `), _tmpl$17 = /* @__PURE__ */ web.template(`<span> · 上次 `), _tmpl$18 = /* @__PURE__ */ web.template(`<button>解除`), _tmpl$19 = /* @__PURE__ */ web.template(`<button>设为默认`), _tmpl$20 = /* @__PURE__ */ web.template(`<button>删除`), _tmpl$21 = /* @__PURE__ */ web.template(`<div style="display:flex;align-items:flex-start;gap:14px;padding:12px 14px"><div style=min-width:0;flex:1><div style=display:flex;align-items:baseline;gap:8px;min-width:0><span style=width:6px;height:6px;border-radius:50%;flex-shrink:0;transform:translateY(-2px)></span><span style=font-weight:500;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis></span></div><div style=margin-top:4px;display:flex;gap:7px;align-items:center;flex-wrap:wrap><span style=font-size:10px></span></div><div style=display:flex;gap:5px;margin-top:8px;flex-wrap:wrap></div><div style=margin-top:8px;font-size:11.5px;line-height:1.5>调用 <!> · 失败 <!> · 最近 </div></div><div style=display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;max-width:210px><button></button><button>`), _tmpl$22 = /* @__PURE__ */ web.template(`<span style=font-size:11px>`), _tmpl$23 = /* @__PURE__ */ web.template(`<div style="padding:7px 8px 3px;font-size:10.5px;letter-spacing:0.03em">`), _tmpl$24 = /* @__PURE__ */ web.template(`<span>✓`), _tmpl$25 = /* @__PURE__ */ web.template(`<div style="display:flex;justify-content:space-between;padding:5px 8px;border-radius:5px;cursor:pointer;font-size:12px"><span>`), _tmpl$26 = /* @__PURE__ */ web.template(`<button>`), _tmpl$27 = /* @__PURE__ */ web.template(`<div style=padding:14px;font-size:11.5px;line-height:1.6>`), _tmpl$28 = /* @__PURE__ */ web.template(`<div style="display:grid;grid-template-columns:minmax(180px, 260px) 1fr;align-items:center;gap:16px;padding:10px 14px"><div><div style=font-size:12.5px></div><div style=font-size:11px;margin-top:2px> · </div></div><div style=display:flex;align-items:center;gap:10px><div style=flex:1;height:6px;border-radius:3px;overflow:hidden><div style=height:100%></div></div><span style=width:40px;text-align:right;font-size:12px>%`);
 const T = {
   base: "var(--v2-text-text-base, #e6e9ef)",
   muted: "var(--v2-text-text-muted, #93a0b6)",
@@ -269,6 +287,11 @@ const gui = gui$1.Plugin.define({
         const [picker, setPicker] = solidJs.createSignal(false);
         const [now, setNow] = solidJs.createSignal(Date.now());
         const [elapsed, setElapsed] = solidJs.createSignal(0);
+        const [loginFor, setLoginFor] = solidJs.createSignal("");
+        const [loginUrl, setLoginUrl] = solidJs.createSignal("");
+        const [loginCode, setLoginCode] = solidJs.createSignal("");
+        const [loginError, setLoginError] = solidJs.createSignal("");
+        const [loginCopied, setLoginCopied] = solidJs.createSignal(false);
         const [local, setLocal] = store.createStore({
           tier: ""
         });
@@ -350,6 +373,85 @@ const gui = gui$1.Plugin.define({
             setBusy("");
           }
         }
+        async function startLogin(id) {
+          if (busy()) return;
+          setBusy(`login-${id}`);
+          setMsg("");
+          setLoginError("");
+          try {
+            const {
+              url
+            } = await client.login({
+              id
+            });
+            setLoginFor(id);
+            setLoginUrl(url);
+            setLoginCode("");
+            setLoginCopied(false);
+          } catch (e) {
+            setMsg(`无法启动登录：${String((e == null ? void 0 : e.message) ?? e).slice(0, 200)}`);
+          } finally {
+            setBusy("");
+          }
+        }
+        async function copyLoginUrl() {
+          try {
+            await navigator.clipboard.writeText(loginUrl());
+            setLoginCopied(true);
+            setTimeout(() => setLoginCopied(false), 1500);
+          } catch {
+            setLoginError("复制失败：请手动选中链接复制。");
+          }
+        }
+        async function submitLoginCode() {
+          const id = loginFor();
+          if (!id) return;
+          const code = loginCode().trim();
+          if (!code) {
+            setLoginError("请先粘贴授权码或回调页面的完整地址。");
+            return;
+          }
+          setBusy(`code-${id}`);
+          setLoginError("");
+          try {
+            const result = await client.loginCode({
+              id,
+              code
+            });
+            if (!result.ok) {
+              setLoginError(result.error ?? "登录失败，请重新复制链接后再试。");
+              return;
+            }
+            setLoginFor("");
+            setLoginUrl("");
+            setLoginCode("");
+            setMsg(`登录成功${result.email ? `：${result.email}` : ""}`);
+            await refetch();
+          } catch (e) {
+            setLoginError(String((e == null ? void 0 : e.message) ?? e).slice(0, 300));
+          } finally {
+            setBusy("");
+          }
+        }
+        async function cancelLogin() {
+          const id = loginFor();
+          setLoginFor("");
+          setLoginUrl("");
+          setLoginCode("");
+          setLoginError("");
+          if (!id) return;
+          try {
+            await client.loginCancel({
+              id
+            });
+          } catch {
+          }
+        }
+        const loginAlias = solidJs.createMemo(() => {
+          var _a, _b;
+          const id = loginFor();
+          return ((_b = (_a = state()) == null ? void 0 : _a.accounts.find((a) => a.id === id)) == null ? void 0 : _b.alias) ?? id;
+        });
         return (() => {
           var _el$2 = _tmpl$3(), _el$3 = _el$2.firstChild, _el$4 = _el$3.firstChild, _el$5 = _el$4.nextSibling, _el$6 = _el$5.firstChild, _el$8 = _el$6.nextSibling, _el$9 = _el$8.nextSibling, _el$0 = _el$9.nextSibling;
           web.insert(_el$2, web.createComponent(solidJs.Show, {
@@ -385,123 +487,104 @@ const gui = gui$1.Plugin.define({
                   const cooling = left > 0;
                   const isActive = acc.id === data().activeAccountId;
                   return (() => {
-                    var _el$50 = _tmpl$20(), _el$51 = _el$50.firstChild, _el$52 = _el$51.firstChild, _el$53 = _el$52.firstChild, _el$54 = _el$53.nextSibling, _el$60 = _el$52.nextSibling, _el$62 = _el$60.firstChild, _el$63 = _el$60.nextSibling, _el$64 = _el$63.nextSibling, _el$65 = _el$64.firstChild, _el$72 = _el$65.nextSibling, _el$66 = _el$72.nextSibling, _el$73 = _el$66.nextSibling;
-                    _el$73.nextSibling;
-                    var _el$74 = _el$51.nextSibling, _el$75 = _el$74.firstChild;
-                    web.insert(_el$54, () => acc.alias);
-                    web.insert(_el$52, web.createComponent(solidJs.Show, {
+                    var _el$69 = _tmpl$21(), _el$70 = _el$69.firstChild, _el$71 = _el$70.firstChild, _el$72 = _el$71.firstChild, _el$73 = _el$72.nextSibling, _el$79 = _el$71.nextSibling, _el$81 = _el$79.firstChild, _el$82 = _el$79.nextSibling, _el$83 = _el$82.nextSibling, _el$84 = _el$83.firstChild, _el$91 = _el$84.nextSibling, _el$85 = _el$91.nextSibling, _el$92 = _el$85.nextSibling;
+                    _el$92.nextSibling;
+                    var _el$93 = _el$70.nextSibling, _el$94 = _el$93.firstChild, _el$95 = _el$94.nextSibling;
+                    web.insert(_el$73, () => acc.alias);
+                    web.insert(_el$71, web.createComponent(solidJs.Show, {
                       when: isActive,
                       get children() {
-                        var _el$55 = _tmpl$11();
-                        web.effect((_$p) => web.setStyleProperty(_el$55, "color", T.accent));
-                        return _el$55;
+                        var _el$74 = _tmpl$13();
+                        web.effect((_$p) => web.setStyleProperty(_el$74, "color", T.accent));
+                        return _el$74;
                       }
                     }), null);
-                    web.insert(_el$52, web.createComponent(solidJs.Show, {
+                    web.insert(_el$71, web.createComponent(solidJs.Show, {
                       when: cooling,
                       get children() {
-                        var _el$56 = _tmpl$12(), _el$57 = _el$56.firstChild, _el$59 = _el$57.nextSibling;
-                        _el$59.nextSibling;
-                        web.insert(_el$56, left, _el$59);
-                        web.effect((_$p) => web.setStyleProperty(_el$56, "color", T.yellow));
-                        return _el$56;
+                        var _el$75 = _tmpl$14(), _el$76 = _el$75.firstChild, _el$78 = _el$76.nextSibling;
+                        _el$78.nextSibling;
+                        web.insert(_el$75, left, _el$78);
+                        web.effect((_$p) => web.setStyleProperty(_el$75, "color", T.yellow));
+                        return _el$75;
                       }
                     }), null);
-                    web.insert(_el$60, web.createComponent(solidJs.Show, {
+                    web.insert(_el$79, web.createComponent(solidJs.Show, {
                       get when() {
                         return acc.email;
                       },
                       get fallback() {
                         return (() => {
-                          var _el$80 = _tmpl$21();
-                          web.insert(_el$80, () => acc.id === "system" ? "未读取到登录账号" : "未登录 · 点「登录」授权");
-                          web.effect((_$p) => web.setStyleProperty(_el$80, "color", T.faint));
-                          return _el$80;
+                          var _el$99 = _tmpl$22();
+                          web.insert(_el$99, () => acc.id === "system" ? "未读取到登录账号" : "未登录 · 点「登录」授权");
+                          web.effect((_$p) => web.setStyleProperty(_el$99, "color", T.faint));
+                          return _el$99;
                         })();
                       },
                       get children() {
-                        var _el$61 = _tmpl$13();
-                        web.insert(_el$61, () => acc.email);
+                        var _el$80 = _tmpl$15();
+                        web.insert(_el$80, () => acc.email);
                         web.effect((_p$) => {
-                          var _v$33 = T.muted, _v$34 = `11.5px ${T.mono}`;
-                          _v$33 !== _p$.e && web.setStyleProperty(_el$61, "color", _p$.e = _v$33);
-                          _v$34 !== _p$.t && web.setStyleProperty(_el$61, "font", _p$.t = _v$34);
+                          var _v$49 = T.muted, _v$50 = `11.5px ${T.mono}`;
+                          _v$49 !== _p$.e && web.setStyleProperty(_el$80, "color", _p$.e = _v$49);
+                          _v$50 !== _p$.t && web.setStyleProperty(_el$80, "font", _p$.t = _v$50);
                           return _p$;
                         }, {
                           e: void 0,
                           t: void 0
                         });
-                        return _el$61;
+                        return _el$80;
                       }
-                    }), _el$62);
-                    web.insert(_el$62, () => acc.id);
-                    web.insert(_el$63, () => chip(acc.argon, "Argon"), null);
-                    web.insert(_el$63, () => chip(acc.claude, "Claude"), null);
-                    web.insert(_el$63, () => chip(acc.flash, "Flash"), null);
-                    web.insert(_el$64, () => acc.calls ?? 0, _el$72);
-                    web.insert(_el$64, () => acc.failures ?? 0, _el$73);
-                    web.insert(_el$64, () => ago(acc.lastUsedAt, now()), null);
-                    web.insert(_el$64, web.createComponent(solidJs.Show, {
+                    }), _el$81);
+                    web.insert(_el$81, () => acc.id);
+                    web.insert(_el$82, () => chip(acc.argon, "Argon"), null);
+                    web.insert(_el$82, () => chip(acc.claude, "Claude"), null);
+                    web.insert(_el$82, () => chip(acc.flash, "Flash"), null);
+                    web.insert(_el$83, () => acc.calls ?? 0, _el$91);
+                    web.insert(_el$83, () => acc.failures ?? 0, _el$92);
+                    web.insert(_el$83, () => ago(acc.lastUsedAt, now()), null);
+                    web.insert(_el$83, web.createComponent(solidJs.Show, {
                       get when() {
                         return acc.checkedAt;
                       },
                       get children() {
-                        var _el$68 = _tmpl$14();
-                        _el$68.firstChild;
-                        web.insert(_el$68, () => ago(acc.checkedAt, now()), null);
-                        web.effect((_$p) => web.setStyleProperty(_el$68, "color", T.faint));
-                        return _el$68;
+                        var _el$87 = _tmpl$16();
+                        _el$87.firstChild;
+                        web.insert(_el$87, () => ago(acc.checkedAt, now()), null);
+                        web.effect((_$p) => web.setStyleProperty(_el$87, "color", T.faint));
+                        return _el$87;
                       }
                     }), null);
-                    web.insert(_el$64, web.createComponent(solidJs.Show, {
+                    web.insert(_el$83, web.createComponent(solidJs.Show, {
                       get when() {
                         return acc.lastError;
                       },
                       get children() {
-                        var _el$70 = _tmpl$15();
-                        _el$70.firstChild;
-                        web.insert(_el$70, () => acc.lastError, null);
-                        web.effect((_$p) => web.setStyleProperty(_el$70, "color", T.yellow));
-                        return _el$70;
+                        var _el$89 = _tmpl$17();
+                        _el$89.firstChild;
+                        web.insert(_el$89, () => acc.lastError, null);
+                        web.effect((_$p) => web.setStyleProperty(_el$89, "color", T.yellow));
+                        return _el$89;
                       }
                     }), null);
-                    _el$75.$$click = () => run(acc.id, () => client.probe({
+                    _el$94.$$click = () => run(acc.id, () => client.probe({
                       id: acc.id
                     }), "探测完成");
-                    web.insert(_el$75, () => busy() === acc.id ? "探测中" : "探测");
-                    web.insert(_el$74, web.createComponent(solidJs.Show, {
-                      get when() {
-                        return acc.home;
-                      },
-                      get children() {
-                        var _el$76 = _tmpl$16();
-                        _el$76.$$click = () => run(`login-${acc.id}`, () => client.login({
-                          id: acc.id
-                        }), "已打开浏览器授权");
-                        web.effect((_p$) => {
-                          var _v$35 = btnStyle(), _v$36 = busy() === `login-${acc.id}`;
-                          _p$.e = web.style(_el$76, _v$35, _p$.e);
-                          _v$36 !== _p$.t && (_el$76.disabled = _p$.t = _v$36);
-                          return _p$;
-                        }, {
-                          e: void 0,
-                          t: void 0
-                        });
-                        return _el$76;
-                      }
-                    }), null);
-                    web.insert(_el$74, web.createComponent(solidJs.Show, {
+                    web.insert(_el$94, () => busy() === acc.id ? "探测中" : "探测");
+                    _el$95.$$click = () => void startLogin(acc.id);
+                    web.insert(_el$95, () => busy() === `login-${acc.id}` ? "准备中" : "登录");
+                    web.insert(_el$93, web.createComponent(solidJs.Show, {
                       when: cooling,
                       get children() {
-                        var _el$77 = _tmpl$17();
-                        _el$77.$$click = () => run(`cd-${acc.id}`, () => client.clearCooldown({
+                        var _el$96 = _tmpl$18();
+                        _el$96.$$click = () => run(`cd-${acc.id}`, () => client.clearCooldown({
                           id: acc.id
                         }), "已解除冷却");
-                        web.effect((_$p) => web.style(_el$77, btnStyle(), _$p));
-                        return _el$77;
+                        web.effect((_$p) => web.style(_el$96, btnStyle(), _$p));
+                        return _el$96;
                       }
                     }), null);
-                    web.insert(_el$74, web.createComponent(solidJs.Show, {
+                    web.insert(_el$93, web.createComponent(solidJs.Show, {
                       get when() {
                         return acc.id !== "system";
                       },
@@ -509,33 +592,35 @@ const gui = gui$1.Plugin.define({
                         return [web.createComponent(solidJs.Show, {
                           when: !isActive,
                           get children() {
-                            var _el$78 = _tmpl$18();
-                            _el$78.$$click = () => run(acc.id, () => client.setActive({
+                            var _el$97 = _tmpl$19();
+                            _el$97.$$click = () => run(acc.id, () => client.setActive({
                               id: acc.id
                             }), "已切换默认账号");
-                            web.effect((_$p) => web.style(_el$78, btnStyle(), _$p));
-                            return _el$78;
+                            web.effect((_$p) => web.style(_el$97, btnStyle(), _$p));
+                            return _el$97;
                           }
                         }), (() => {
-                          var _el$79 = _tmpl$19();
-                          _el$79.$$click = () => run(acc.id, () => client.remove({
+                          var _el$98 = _tmpl$20();
+                          _el$98.$$click = () => run(acc.id, () => client.remove({
                             id: acc.id
                           }), "已删除");
-                          web.effect((_$p) => web.style(_el$79, btnStyle("danger"), _$p));
-                          return _el$79;
+                          web.effect((_$p) => web.style(_el$98, btnStyle("danger"), _$p));
+                          return _el$98;
                         })()];
                       }
                     }), null);
                     web.effect((_p$) => {
-                      var _v$37 = acc === data().accounts[0] ? "none" : `1px solid ${T.border}`, _v$38 = isActive ? T.layer2 : "transparent", _v$39 = cooling ? T.yellow : isActive ? T.green : T.faint, _v$40 = T.faint, _v$41 = acc.id, _v$42 = T.weak, _v$43 = btnStyle(), _v$44 = busy() === acc.id;
-                      _v$37 !== _p$.e && web.setStyleProperty(_el$50, "border-top", _p$.e = _v$37);
-                      _v$38 !== _p$.t && web.setStyleProperty(_el$50, "background", _p$.t = _v$38);
-                      _v$39 !== _p$.a && web.setStyleProperty(_el$53, "background", _p$.a = _v$39);
-                      _v$40 !== _p$.o && web.setStyleProperty(_el$62, "color", _p$.o = _v$40);
-                      _v$41 !== _p$.i && web.setAttribute(_el$62, "title", _p$.i = _v$41);
-                      _v$42 !== _p$.n && web.setStyleProperty(_el$64, "color", _p$.n = _v$42);
-                      _p$.s = web.style(_el$75, _v$43, _p$.s);
-                      _v$44 !== _p$.h && (_el$75.disabled = _p$.h = _v$44);
+                      var _v$51 = acc === data().accounts[0] ? "none" : `1px solid ${T.border}`, _v$52 = isActive ? T.layer2 : "transparent", _v$53 = cooling ? T.yellow : isActive ? T.green : T.faint, _v$54 = T.faint, _v$55 = acc.id, _v$56 = T.weak, _v$57 = btnStyle(), _v$58 = busy() === acc.id, _v$59 = btnStyle(), _v$60 = busy() === `login-${acc.id}`;
+                      _v$51 !== _p$.e && web.setStyleProperty(_el$69, "border-top", _p$.e = _v$51);
+                      _v$52 !== _p$.t && web.setStyleProperty(_el$69, "background", _p$.t = _v$52);
+                      _v$53 !== _p$.a && web.setStyleProperty(_el$72, "background", _p$.a = _v$53);
+                      _v$54 !== _p$.o && web.setStyleProperty(_el$81, "color", _p$.o = _v$54);
+                      _v$55 !== _p$.i && web.setAttribute(_el$81, "title", _p$.i = _v$55);
+                      _v$56 !== _p$.n && web.setStyleProperty(_el$83, "color", _p$.n = _v$56);
+                      _p$.s = web.style(_el$94, _v$57, _p$.s);
+                      _v$58 !== _p$.h && (_el$94.disabled = _p$.h = _v$58);
+                      _p$.r = web.style(_el$95, _v$59, _p$.r);
+                      _v$60 !== _p$.d && (_el$95.disabled = _p$.d = _v$60);
                       return _p$;
                     }, {
                       e: void 0,
@@ -545,9 +630,11 @@ const gui = gui$1.Plugin.define({
                       i: void 0,
                       n: void 0,
                       s: void 0,
-                      h: void 0
+                      h: void 0,
+                      r: void 0,
+                      d: void 0
                     });
-                    return _el$50;
+                    return _el$69;
                   })();
                 }
               }));
@@ -576,96 +663,169 @@ const gui = gui$1.Plugin.define({
               });
               web.effect(() => _el$14.value = alias());
               return _el$13;
-            })(), (() => {
-              var _el$16 = _tmpl$7();
-              web.effect((_$p) => web.style(_el$16, {
+            })(), web.createComponent(solidJs.Show, {
+              get when() {
+                return loginFor();
+              },
+              get children() {
+                var _el$16 = _tmpl$8(), _el$17 = _el$16.firstChild, _el$18 = _el$17.firstChild, _el$19 = _el$18.firstChild, _el$20 = _el$19.firstChild, _el$22 = _el$20.nextSibling;
+                _el$22.nextSibling;
+                var _el$23 = _el$19.nextSibling, _el$24 = _el$18.nextSibling, _el$25 = _el$17.nextSibling, _el$26 = _el$25.firstChild, _el$27 = _el$26.firstChild, _el$28 = _el$27.nextSibling, _el$29 = _el$26.nextSibling, _el$30 = _el$29.nextSibling, _el$31 = _el$30.firstChild, _el$32 = _el$31.nextSibling, _el$34 = _el$30.nextSibling;
+                web.insert(_el$19, loginAlias, _el$22);
+                _el$24.$$click = () => void cancelLogin();
+                _el$27.addEventListener("focus", (e) => e.currentTarget.select());
+                _el$28.$$click = () => void copyLoginUrl();
+                web.insert(_el$28, () => loginCopied() ? "已复制" : "复制链接");
+                _el$31.$$keydown = (e) => {
+                  if (e.key === "Enter") void submitLoginCode();
+                };
+                _el$31.$$input = (e) => setLoginCode(e.currentTarget.value);
+                _el$32.$$click = () => void submitLoginCode();
+                web.insert(_el$32, () => busy() === `code-${loginFor()}` ? "校验中" : "完成登录");
+                web.insert(_el$25, web.createComponent(solidJs.Show, {
+                  get when() {
+                    return loginError();
+                  },
+                  get children() {
+                    var _el$33 = _tmpl$7();
+                    web.insert(_el$33, loginError);
+                    web.effect((_$p) => web.setStyleProperty(_el$33, "color", T.yellow));
+                    return _el$33;
+                  }
+                }), _el$34);
+                web.effect((_p$) => {
+                  var _v$13 = {
+                    ...card
+                  }, _v$14 = T.layer2, _v$15 = T.faint, _v$16 = btnStyle(), _v$17 = `11px ${T.mono}`, _v$18 = `1px solid ${T.border}`, _v$19 = T.layer1, _v$20 = T.muted, _v$21 = btnStyle("primary"), _v$22 = T.weak, _v$23 = `1px solid ${T.border}`, _v$24 = T.layer1, _v$25 = T.base, _v$26 = btnStyle("primary"), _v$27 = busy() === `code-${loginFor()}`, _v$28 = T.faint;
+                  _p$.e = web.style(_el$16, _v$13, _p$.e);
+                  _v$14 !== _p$.t && web.setStyleProperty(_el$17, "background", _p$.t = _v$14);
+                  _v$15 !== _p$.a && web.setStyleProperty(_el$23, "color", _p$.a = _v$15);
+                  _p$.o = web.style(_el$24, _v$16, _p$.o);
+                  _v$17 !== _p$.i && web.setStyleProperty(_el$27, "font", _p$.i = _v$17);
+                  _v$18 !== _p$.n && web.setStyleProperty(_el$27, "border", _p$.n = _v$18);
+                  _v$19 !== _p$.s && web.setStyleProperty(_el$27, "background", _p$.s = _v$19);
+                  _v$20 !== _p$.h && web.setStyleProperty(_el$27, "color", _p$.h = _v$20);
+                  _p$.r = web.style(_el$28, _v$21, _p$.r);
+                  _v$22 !== _p$.d && web.setStyleProperty(_el$29, "color", _p$.d = _v$22);
+                  _v$23 !== _p$.l && web.setStyleProperty(_el$31, "border", _p$.l = _v$23);
+                  _v$24 !== _p$.u && web.setStyleProperty(_el$31, "background", _p$.u = _v$24);
+                  _v$25 !== _p$.c && web.setStyleProperty(_el$31, "color", _p$.c = _v$25);
+                  _p$.w = web.style(_el$32, _v$26, _p$.w);
+                  _v$27 !== _p$.m && (_el$32.disabled = _p$.m = _v$27);
+                  _v$28 !== _p$.f && web.setStyleProperty(_el$34, "color", _p$.f = _v$28);
+                  return _p$;
+                }, {
+                  e: void 0,
+                  t: void 0,
+                  a: void 0,
+                  o: void 0,
+                  i: void 0,
+                  n: void 0,
+                  s: void 0,
+                  h: void 0,
+                  r: void 0,
+                  d: void 0,
+                  l: void 0,
+                  u: void 0,
+                  c: void 0,
+                  w: void 0,
+                  m: void 0,
+                  f: void 0
+                });
+                web.effect(() => _el$27.value = loginUrl());
+                web.effect(() => _el$31.value = loginCode());
+                return _el$16;
+              }
+            }), (() => {
+              var _el$35 = _tmpl$9();
+              web.effect((_$p) => web.style(_el$35, {
                 ...label
               }, _$p));
-              return _el$16;
+              return _el$35;
             })(), (() => {
-              var _el$17 = _tmpl$9(), _el$18 = _el$17.firstChild, _el$19 = _el$18.firstChild, _el$20 = _el$19.firstChild, _el$21 = _el$20.nextSibling, _el$22 = _el$19.nextSibling, _el$23 = _el$22.firstChild, _el$24 = _el$23.firstChild, _el$26 = _el$18.nextSibling, _el$27 = _el$26.firstChild, _el$28 = _el$27.firstChild, _el$29 = _el$28.nextSibling, _el$30 = _el$27.nextSibling, _el$31 = _el$26.nextSibling, _el$32 = _el$31.firstChild, _el$33 = _el$32.firstChild, _el$34 = _el$33.nextSibling, _el$35 = _el$32.nextSibling, _el$36 = _el$35.firstChild, _el$37 = _el$36.nextSibling;
-              _el$23.$$click = () => setPicker((v) => !v);
-              web.insert(_el$23, () => TIER_LABEL[tier()] ?? tier(), _el$24);
-              web.insert(_el$23, () => picker() ? "▴" : "▾", null);
-              web.insert(_el$22, web.createComponent(solidJs.Show, {
+              var _el$36 = _tmpl$1(), _el$37 = _el$36.firstChild, _el$38 = _el$37.firstChild, _el$39 = _el$38.firstChild, _el$40 = _el$39.nextSibling, _el$41 = _el$38.nextSibling, _el$42 = _el$41.firstChild, _el$43 = _el$42.firstChild, _el$45 = _el$37.nextSibling, _el$46 = _el$45.firstChild, _el$47 = _el$46.firstChild, _el$48 = _el$47.nextSibling, _el$49 = _el$46.nextSibling, _el$50 = _el$45.nextSibling, _el$51 = _el$50.firstChild, _el$52 = _el$51.firstChild, _el$53 = _el$52.nextSibling, _el$54 = _el$51.nextSibling, _el$55 = _el$54.firstChild, _el$56 = _el$55.nextSibling;
+              _el$42.$$click = () => setPicker((v) => !v);
+              web.insert(_el$42, () => TIER_LABEL[tier()] ?? tier(), _el$43);
+              web.insert(_el$42, () => picker() ? "▴" : "▾", null);
+              web.insert(_el$41, web.createComponent(solidJs.Show, {
                 get when() {
                   return picker();
                 },
                 get children() {
-                  var _el$25 = _tmpl$8();
-                  web.insert(_el$25, web.createComponent(solidJs.For, {
+                  var _el$44 = _tmpl$0();
+                  web.insert(_el$44, web.createComponent(solidJs.For, {
                     get each() {
                       return groups();
                     },
                     children: (g) => [(() => {
-                      var _el$81 = _tmpl$22();
-                      web.insert(_el$81, () => g.model);
-                      web.effect((_$p) => web.setStyleProperty(_el$81, "color", T.faint));
-                      return _el$81;
+                      var _el$100 = _tmpl$23();
+                      web.insert(_el$100, () => g.model);
+                      web.effect((_$p) => web.setStyleProperty(_el$100, "color", T.faint));
+                      return _el$100;
                     })(), web.createComponent(solidJs.For, {
                       get each() {
                         return g.tiers;
                       },
                       children: ([id, level]) => (() => {
-                        var _el$82 = _tmpl$24(), _el$83 = _el$82.firstChild;
-                        _el$82.$$click = () => {
+                        var _el$101 = _tmpl$25(), _el$102 = _el$101.firstChild;
+                        _el$101.$$click = () => {
                           setPicker(false);
                           setLocal("tier", id);
                           void run("tier", () => client.setDefaultTier({
                             tier: id
                           }), "默认档位已保存");
                         };
-                        web.setAttribute(_el$82, "data-tier", id);
-                        web.insert(_el$83, level);
-                        web.insert(_el$82, web.createComponent(solidJs.Show, {
+                        web.setAttribute(_el$101, "data-tier", id);
+                        web.insert(_el$102, level);
+                        web.insert(_el$101, web.createComponent(solidJs.Show, {
                           get when() {
                             return id === tier();
                           },
                           get children() {
-                            var _el$84 = _tmpl$23();
-                            web.effect((_$p) => web.setStyleProperty(_el$84, "color", T.accent));
-                            return _el$84;
+                            var _el$103 = _tmpl$24();
+                            web.effect((_$p) => web.setStyleProperty(_el$103, "color", T.accent));
+                            return _el$103;
                           }
                         }), null);
                         web.effect((_p$) => {
-                          var _v$45 = id === tier() ? T.layer2 : "transparent", _v$46 = id === tier() ? T.base : T.muted;
-                          _v$45 !== _p$.e && web.setStyleProperty(_el$82, "background", _p$.e = _v$45);
-                          _v$46 !== _p$.t && web.setStyleProperty(_el$82, "color", _p$.t = _v$46);
+                          var _v$61 = id === tier() ? T.layer2 : "transparent", _v$62 = id === tier() ? T.base : T.muted;
+                          _v$61 !== _p$.e && web.setStyleProperty(_el$101, "background", _p$.e = _v$61);
+                          _v$62 !== _p$.t && web.setStyleProperty(_el$101, "color", _p$.t = _v$62);
                           return _p$;
                         }, {
                           e: void 0,
                           t: void 0
                         });
-                        return _el$82;
+                        return _el$101;
                       })()
                     })]
                   }));
-                  web.effect((_$p) => web.setStyleProperty(_el$25, "border", `1px solid ${T.borderStrong}`));
-                  return _el$25;
+                  web.effect((_$p) => web.setStyleProperty(_el$44, "border", `1px solid ${T.borderStrong}`));
+                  return _el$44;
                 }
               }), null);
-              web.insert(_el$29, () => {
+              web.insert(_el$48, () => {
                 var _a;
                 return ((_a = ROUTING.find(([v]) => v === data().routing)) == null ? void 0 : _a[2]) ?? "";
               });
-              web.insert(_el$30, web.createComponent(solidJs.For, {
+              web.insert(_el$49, web.createComponent(solidJs.For, {
                 each: ROUTING,
                 children: ([value, text]) => (() => {
-                  var _el$85 = _tmpl$25();
-                  _el$85.$$click = () => run("routing", () => client.setRouting({
+                  var _el$104 = _tmpl$26();
+                  _el$104.$$click = () => run("routing", () => client.setRouting({
                     routing: value
                   }), "路由策略已保存");
-                  web.insert(_el$85, text);
-                  web.effect((_$p) => web.style(_el$85, {
+                  web.insert(_el$104, text);
+                  web.effect((_$p) => web.style(_el$104, {
                     ...btnStyle(),
                     "border-color": data().routing === value ? T.accent : T.border,
                     background: data().routing === value ? "color-mix(in srgb, var(--v2-blue-600, #3b5bdb) 18%, transparent)" : T.btn,
                     color: data().routing === value ? T.base : T.muted
                   }, _$p));
-                  return _el$85;
+                  return _el$104;
                 })()
               }));
-              _el$36.addEventListener("change", (e) => {
+              _el$55.addEventListener("change", (e) => {
                 const minutes = Number(e.currentTarget.value);
                 if (!Number.isFinite(minutes) || minutes < 1) return;
                 void run("cooldown", () => client.setCooldown({
@@ -673,23 +833,23 @@ const gui = gui$1.Plugin.define({
                 }), "已保存");
               });
               web.effect((_p$) => {
-                var _v$13 = card, _v$14 = {
+                var _v$29 = card, _v$30 = {
                   ...row
-                }, _v$15 = T.faint, _v$16 = {
+                }, _v$31 = T.faint, _v$32 = {
                   ...btnStyle()
-                }, _v$17 = row, _v$18 = T.faint, _v$19 = row, _v$20 = T.faint, _v$21 = `1px solid ${T.border}`, _v$22 = T.layer1, _v$23 = T.base, _v$24 = T.faint;
-                _p$.e = web.style(_el$17, _v$13, _p$.e);
-                _p$.t = web.style(_el$18, _v$14, _p$.t);
-                _v$15 !== _p$.a && web.setStyleProperty(_el$21, "color", _p$.a = _v$15);
-                _p$.o = web.style(_el$23, _v$16, _p$.o);
-                _p$.i = web.style(_el$26, _v$17, _p$.i);
-                _v$18 !== _p$.n && web.setStyleProperty(_el$29, "color", _p$.n = _v$18);
-                _p$.s = web.style(_el$31, _v$19, _p$.s);
-                _v$20 !== _p$.h && web.setStyleProperty(_el$34, "color", _p$.h = _v$20);
-                _v$21 !== _p$.r && web.setStyleProperty(_el$36, "border", _p$.r = _v$21);
-                _v$22 !== _p$.d && web.setStyleProperty(_el$36, "background", _p$.d = _v$22);
-                _v$23 !== _p$.l && web.setStyleProperty(_el$36, "color", _p$.l = _v$23);
-                _v$24 !== _p$.u && web.setStyleProperty(_el$37, "color", _p$.u = _v$24);
+                }, _v$33 = row, _v$34 = T.faint, _v$35 = row, _v$36 = T.faint, _v$37 = `1px solid ${T.border}`, _v$38 = T.layer1, _v$39 = T.base, _v$40 = T.faint;
+                _p$.e = web.style(_el$36, _v$29, _p$.e);
+                _p$.t = web.style(_el$37, _v$30, _p$.t);
+                _v$31 !== _p$.a && web.setStyleProperty(_el$40, "color", _p$.a = _v$31);
+                _p$.o = web.style(_el$42, _v$32, _p$.o);
+                _p$.i = web.style(_el$45, _v$33, _p$.i);
+                _v$34 !== _p$.n && web.setStyleProperty(_el$48, "color", _p$.n = _v$34);
+                _p$.s = web.style(_el$50, _v$35, _p$.s);
+                _v$36 !== _p$.h && web.setStyleProperty(_el$53, "color", _p$.h = _v$36);
+                _v$37 !== _p$.r && web.setStyleProperty(_el$55, "border", _p$.r = _v$37);
+                _v$38 !== _p$.d && web.setStyleProperty(_el$55, "background", _p$.d = _v$38);
+                _v$39 !== _p$.l && web.setStyleProperty(_el$55, "color", _p$.l = _v$39);
+                _v$40 !== _p$.u && web.setStyleProperty(_el$56, "color", _p$.u = _v$40);
                 return _p$;
               }, {
                 e: void 0,
@@ -705,33 +865,33 @@ const gui = gui$1.Plugin.define({
                 l: void 0,
                 u: void 0
               });
-              web.effect(() => _el$36.value = Math.round((data().cooldownMs ?? 9e5) / 6e4));
-              return _el$17;
+              web.effect(() => _el$55.value = Math.round((data().cooldownMs ?? 9e5) / 6e4));
+              return _el$36;
             })(), (() => {
-              var _el$38 = _tmpl$0(), _el$39 = _el$38.firstChild, _el$40 = _el$39.firstChild, _el$41 = _el$40.nextSibling, _el$42 = _el$41.firstChild, _el$43 = _el$42.nextSibling, _el$44 = _el$39.nextSibling;
-              web.insert(_el$41, (() => {
+              var _el$57 = _tmpl$10(), _el$58 = _el$57.firstChild, _el$59 = _el$58.firstChild, _el$60 = _el$59.nextSibling, _el$61 = _el$60.firstChild, _el$62 = _el$61.nextSibling, _el$63 = _el$58.nextSibling;
+              web.insert(_el$60, (() => {
                 var _c$ = web.memo(() => {
                   var _a;
                   return !!((_a = activeAccount()) == null ? void 0 : _a.usageCheckedAt);
                 });
                 return () => _c$() ? ` · ${ago(activeAccount().usageCheckedAt, now())}` : "";
               })(), null);
-              _el$44.$$click = () => run("usage", () => client.usage({
+              _el$63.$$click = () => run("usage", () => client.usage({
                 id: data().activeAccountId
               }), "额度已刷新");
-              web.insert(_el$44, (() => {
+              web.insert(_el$63, (() => {
                 var _c$2 = web.memo(() => busy() === "usage");
                 return () => _c$2() ? `读取中 ${elapsed()}s` : "刷新";
               })());
               web.effect((_p$) => {
-                var _v$25 = {
+                var _v$41 = {
                   ...label
-                }, _v$26 = T.faint, _v$27 = `11px ${T.mono}`, _v$28 = btnStyle(), _v$29 = busy() === "usage";
-                _p$.e = web.style(_el$38, _v$25, _p$.e);
-                _v$26 !== _p$.t && web.setStyleProperty(_el$41, "color", _p$.t = _v$26);
-                _v$27 !== _p$.a && web.setStyleProperty(_el$43, "font", _p$.a = _v$27);
-                _p$.o = web.style(_el$44, _v$28, _p$.o);
-                _v$29 !== _p$.i && (_el$44.disabled = _p$.i = _v$29);
+                }, _v$42 = T.faint, _v$43 = `11px ${T.mono}`, _v$44 = btnStyle(), _v$45 = busy() === "usage";
+                _p$.e = web.style(_el$57, _v$41, _p$.e);
+                _v$42 !== _p$.t && web.setStyleProperty(_el$60, "color", _p$.t = _v$42);
+                _v$43 !== _p$.a && web.setStyleProperty(_el$62, "font", _p$.a = _v$43);
+                _p$.o = web.style(_el$63, _v$44, _p$.o);
+                _v$45 !== _p$.i && (_el$63.disabled = _p$.i = _v$45);
                 return _p$;
               }, {
                 e: void 0,
@@ -740,22 +900,22 @@ const gui = gui$1.Plugin.define({
                 o: void 0,
                 i: void 0
               });
-              return _el$38;
+              return _el$57;
             })(), (() => {
-              var _el$45 = _tmpl$5();
-              web.insert(_el$45, web.createComponent(solidJs.Show, {
+              var _el$64 = _tmpl$5();
+              web.insert(_el$64, web.createComponent(solidJs.Show, {
                 get when() {
                   return activeUsage().length > 0;
                 },
                 get fallback() {
                   return (() => {
-                    var _el$86 = _tmpl$26();
-                    web.insert(_el$86, (() => {
+                    var _el$105 = _tmpl$27();
+                    web.insert(_el$105, (() => {
                       var _c$3 = web.memo(() => busy() === "usage");
                       return () => _c$3() ? `正在向官方 CLI 读取… 已等待 ${elapsed()} 秒（最长 30 秒，超时会自动停止）` : "暂无数据，点右上角「刷新」读取。官方 CLI 首次读取通常要 10–30 秒。";
                     })());
-                    web.effect((_$p) => web.setStyleProperty(_el$86, "color", T.muted));
-                    return _el$86;
+                    web.effect((_$p) => web.setStyleProperty(_el$105, "color", T.muted));
+                    return _el$105;
                   })();
                 },
                 get children() {
@@ -764,20 +924,20 @@ const gui = gui$1.Plugin.define({
                       return activeUsage();
                     },
                     children: (u, i) => (() => {
-                      var _el$87 = _tmpl$27(), _el$88 = _el$87.firstChild, _el$89 = _el$88.firstChild, _el$90 = _el$89.nextSibling, _el$91 = _el$90.firstChild, _el$92 = _el$88.nextSibling, _el$93 = _el$92.firstChild, _el$94 = _el$93.firstChild, _el$95 = _el$93.nextSibling, _el$96 = _el$95.firstChild;
-                      web.insert(_el$89, () => u.label);
-                      web.insert(_el$90, () => u.group, _el$91);
-                      web.insert(_el$90, () => resetIn(u.resetAt, now()), null);
-                      web.insert(_el$95, () => u.percent, _el$96);
+                      var _el$106 = _tmpl$28(), _el$107 = _el$106.firstChild, _el$108 = _el$107.firstChild, _el$109 = _el$108.nextSibling, _el$110 = _el$109.firstChild, _el$111 = _el$107.nextSibling, _el$112 = _el$111.firstChild, _el$113 = _el$112.firstChild, _el$114 = _el$112.nextSibling, _el$115 = _el$114.firstChild;
+                      web.insert(_el$108, () => u.label);
+                      web.insert(_el$109, () => u.group, _el$110);
+                      web.insert(_el$109, () => resetIn(u.resetAt, now()), null);
+                      web.insert(_el$114, () => u.percent, _el$115);
                       web.effect((_p$) => {
-                        var _v$47 = i() === 0 ? "none" : `1px solid ${T.border}`, _v$48 = T.faint, _v$49 = T.layer2, _v$50 = `${Math.max(0, Math.min(100, u.percent))}%`, _v$51 = barColor(u.percent), _v$52 = u.percent >= 20 ? T.base : T.red, _v$53 = `12px ${T.mono}`;
-                        _v$47 !== _p$.e && web.setStyleProperty(_el$87, "border-top", _p$.e = _v$47);
-                        _v$48 !== _p$.t && web.setStyleProperty(_el$90, "color", _p$.t = _v$48);
-                        _v$49 !== _p$.a && web.setStyleProperty(_el$93, "background", _p$.a = _v$49);
-                        _v$50 !== _p$.o && web.setStyleProperty(_el$94, "width", _p$.o = _v$50);
-                        _v$51 !== _p$.i && web.setStyleProperty(_el$94, "background", _p$.i = _v$51);
-                        _v$52 !== _p$.n && web.setStyleProperty(_el$95, "color", _p$.n = _v$52);
-                        _v$53 !== _p$.s && web.setStyleProperty(_el$95, "font", _p$.s = _v$53);
+                        var _v$63 = i() === 0 ? "none" : `1px solid ${T.border}`, _v$64 = T.faint, _v$65 = T.layer2, _v$66 = `${Math.max(0, Math.min(100, u.percent))}%`, _v$67 = barColor(u.percent), _v$68 = u.percent >= 20 ? T.base : T.red, _v$69 = `12px ${T.mono}`;
+                        _v$63 !== _p$.e && web.setStyleProperty(_el$106, "border-top", _p$.e = _v$63);
+                        _v$64 !== _p$.t && web.setStyleProperty(_el$109, "color", _p$.t = _v$64);
+                        _v$65 !== _p$.a && web.setStyleProperty(_el$112, "background", _p$.a = _v$65);
+                        _v$66 !== _p$.o && web.setStyleProperty(_el$113, "width", _p$.o = _v$66);
+                        _v$67 !== _p$.i && web.setStyleProperty(_el$113, "background", _p$.i = _v$67);
+                        _v$68 !== _p$.n && web.setStyleProperty(_el$114, "color", _p$.n = _v$68);
+                        _v$69 !== _p$.s && web.setStyleProperty(_el$114, "font", _p$.s = _v$69);
                         return _p$;
                       }, {
                         e: void 0,
@@ -788,12 +948,12 @@ const gui = gui$1.Plugin.define({
                         n: void 0,
                         s: void 0
                       });
-                      return _el$87;
+                      return _el$106;
                     })()
                   });
                 }
               }), null);
-              web.insert(_el$45, web.createComponent(solidJs.Show, {
+              web.insert(_el$64, web.createComponent(solidJs.Show, {
                 get when() {
                   return web.memo(() => {
                     var _a;
@@ -801,33 +961,33 @@ const gui = gui$1.Plugin.define({
                   })() && busy() !== "usage";
                 },
                 get children() {
-                  var _el$46 = _tmpl$1(), _el$47 = _el$46.firstChild, _el$48 = _el$47.nextSibling;
-                  web.insert(_el$46, () => activeAccount().usageError, _el$48);
+                  var _el$65 = _tmpl$11(), _el$66 = _el$65.firstChild, _el$67 = _el$66.nextSibling;
+                  web.insert(_el$65, () => activeAccount().usageError, _el$67);
                   web.effect((_p$) => {
-                    var _v$30 = `1px solid ${T.border}`, _v$31 = T.yellow, _v$32 = T.faint;
-                    _v$30 !== _p$.e && web.setStyleProperty(_el$46, "border-top", _p$.e = _v$30);
-                    _v$31 !== _p$.t && web.setStyleProperty(_el$46, "color", _p$.t = _v$31);
-                    _v$32 !== _p$.a && web.setStyleProperty(_el$48, "color", _p$.a = _v$32);
+                    var _v$46 = `1px solid ${T.border}`, _v$47 = T.yellow, _v$48 = T.faint;
+                    _v$46 !== _p$.e && web.setStyleProperty(_el$65, "border-top", _p$.e = _v$46);
+                    _v$47 !== _p$.t && web.setStyleProperty(_el$65, "color", _p$.t = _v$47);
+                    _v$48 !== _p$.a && web.setStyleProperty(_el$67, "color", _p$.a = _v$48);
                     return _p$;
                   }, {
                     e: void 0,
                     t: void 0,
                     a: void 0
                   });
-                  return _el$46;
+                  return _el$65;
                 }
               }), null);
-              web.effect((_$p) => web.style(_el$45, card, _$p));
-              return _el$45;
+              web.effect((_$p) => web.style(_el$64, card, _$p));
+              return _el$64;
             })(), web.createComponent(solidJs.Show, {
               get when() {
                 return msg();
               },
               get children() {
-                var _el$49 = _tmpl$10();
-                web.insert(_el$49, msg);
-                web.effect((_$p) => web.setStyleProperty(_el$49, "color", T.muted));
-                return _el$49;
+                var _el$68 = _tmpl$12();
+                web.insert(_el$68, msg);
+                web.effect((_$p) => web.setStyleProperty(_el$68, "color", T.muted));
+                return _el$68;
               }
             })]
           }), null);
@@ -855,6 +1015,26 @@ const gui = gui$1.Plugin.define({
   },
   async main(ctx) {
     const accounts$1 = await Promise.resolve().then(() => accounts);
+    const logins = /* @__PURE__ */ new Map();
+    function stopLogin(id) {
+      var _a;
+      const session = logins.get(id);
+      if (!session) return;
+      clearTimeout(session.timer);
+      try {
+        (_a = session.child.stdin) == null ? void 0 : _a.end();
+      } catch {
+      }
+      try {
+        session.child.kill();
+      } catch {
+      }
+      logins.delete(id);
+    }
+    function authUrlOf(text) {
+      const match = text.match(/https:\/\/accounts\.google\.com\/[^\s"'<>]+/);
+      return match ? match[0] : null;
+    }
     function snapshot() {
       const data = accounts$1.loadAccounts();
       const enriched = data.accounts.map((a) => {
@@ -996,7 +1176,8 @@ const gui = gui$1.Plugin.define({
       }) => {
         const data = accounts$1.loadAccounts();
         const acc = data.accounts.find((a) => a.id === id);
-        if (!acc) return false;
+        if (!acc) throw new Error(`账号不存在：${id}`);
+        stopLogin(id);
         const {
           spawn
         } = await import("node:child_process");
@@ -1006,18 +1187,122 @@ const gui = gui$1.Plugin.define({
         };
         const child = spawn("agy", ["acp", "--login"], {
           env,
-          detached: true,
-          stdio: "ignore",
+          stdio: ["pipe", "pipe", "pipe"],
           shell: true,
           windowsHide: true
         });
-        child.unref();
+        const session = {
+          child,
+          output: "",
+          timer: setTimeout(() => stopLogin(id), 10 * 60 * 1e3)
+        };
+        logins.set(id, session);
+        return new Promise((resolve, reject) => {
+          var _a, _b;
+          let settled = false;
+          const finish = (fn) => {
+            if (settled) return;
+            settled = true;
+            fn();
+          };
+          const onData = (chunk) => {
+            session.output += chunk.toString("utf8");
+            const url = authUrlOf(session.output);
+            if (url) finish(() => resolve({
+              url
+            }));
+          };
+          (_a = child.stdout) == null ? void 0 : _a.on("data", onData);
+          (_b = child.stderr) == null ? void 0 : _b.on("data", onData);
+          child.on("error", (err) => finish(() => {
+            stopLogin(id);
+            reject(err);
+          }));
+          child.on("exit", () => finish(() => {
+            const url = authUrlOf(session.output);
+            if (url) {
+              resolve({
+                url
+              });
+              return;
+            }
+            stopLogin(id);
+            reject(new Error(`agy 没有返回登录链接：${session.output.trim().slice(0, 200) || "无输出"}`));
+          }));
+          setTimeout(() => finish(() => {
+            stopLogin(id);
+            reject(new Error("等待登录链接超时（20 秒）"));
+          }), 2e4);
+        });
+      },
+      loginCode: async ({
+        id,
+        code
+      }) => {
+        var _a;
+        const session = logins.get(id);
+        if (!session) return {
+          ok: false,
+          error: "没有进行中的登录，请先点账号上的「登录」。"
+        };
+        const value = code.trim();
+        if (!value) return {
+          ok: false,
+          error: "请先粘贴授权码或回调页面地址。"
+        };
+        const exitCode = await new Promise((resolve) => {
+          var _a2;
+          const timer = setTimeout(() => resolve(null), 6e4);
+          session.child.once("exit", (code2) => {
+            clearTimeout(timer);
+            resolve(typeof code2 === "number" ? code2 : 1);
+          });
+          try {
+            (_a2 = session.child.stdin) == null ? void 0 : _a2.write(`${value}
+`);
+          } catch {
+            clearTimeout(timer);
+            resolve(1);
+          }
+        });
+        const output = session.output;
+        stopLogin(id);
+        if (exitCode === null) return {
+          ok: false,
+          error: "等待 Google 校验超时（60 秒），请重新点「登录」。"
+        };
+        if (exitCode !== 0) {
+          const last = output.trim().split(/\r?\n/).filter(Boolean).pop();
+          return {
+            ok: false,
+            error: (last ?? "登录失败，请重新复制链接后再试。").slice(0, 300)
+          };
+        }
+        const next = accounts$1.loadAccounts();
+        const target = next.accounts.find((a) => a.id === id);
+        if (target) {
+          const ident = accounts$1.readIdentity(target);
+          target.email = ident.email ?? target.email;
+          target.name = ident.name ?? target.name;
+          target.checkedAt = Date.now();
+          accounts$1.saveAccounts(next);
+        }
+        const email = (_a = accounts$1.loadAccounts().accounts.find((a) => a.id === id)) == null ? void 0 : _a.email;
+        return {
+          ok: true,
+          email
+        };
+      },
+      loginCancel: async ({
+        id
+      }) => {
+        stopLogin(id);
         return true;
       }
     });
   }
 });
-web.delegateEvents(["input", "click"]);
+web.delegateEvents(["input", "click", "keydown"]);
 const SYSTEM_ACCOUNT_ID = "system";
 const DEFAULT_FILE = {
   version: 1,
@@ -1114,7 +1399,8 @@ function accountEnv(account) {
     HOME: account.home,
     USERPROFILE: account.home,
     APPDATA: node_path.join(account.home, "AppData", "Roaming"),
-    LOCALAPPDATA: node_path.join(account.home, "AppData", "Local")
+    LOCALAPPDATA: node_path.join(account.home, "AppData", "Local"),
+    SSH_CONNECTION: "127.0.0.1 0 127.0.0.1 22"
   };
 }
 function accountTokenPath(account) {

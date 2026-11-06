@@ -203,6 +203,13 @@ export function recordResult(
 /**
  * Environment overrides for spawning `agy` as `account`.
  * Returns an empty object for the system account.
+ *
+ * `SSH_CONNECTION` is not cosmetic: on Windows agy reads its OAuth token from
+ * the OS keyring (`gemini:antigravity`), which is shared by every process and
+ * ignores HOME — so two accounts would silently share one token. Detecting an
+ * SSH session makes agy use `~/.gemini/antigravity-cli/antigravity-oauth-token`
+ * instead, which is inside the isolated HOME. That is what makes the isolation
+ * real. The system account is left on the keyring.
  */
 export function accountEnv(account: Account): Record<string, string> {
   if (!account.home) return {};
@@ -211,6 +218,7 @@ export function accountEnv(account: Account): Record<string, string> {
     USERPROFILE: account.home,
     APPDATA: join(account.home, "AppData", "Roaming"),
     LOCALAPPDATA: join(account.home, "AppData", "Local"),
+    SSH_CONNECTION: "127.0.0.1 0 127.0.0.1 22",
   };
 }
 

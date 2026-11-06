@@ -98,7 +98,11 @@ OpenCode  ──OpenAI protocol──▶  http://127.0.0.1:<port>/v1  ──ACP�
   `⚠ Agent execution terminated due to error.`
 - **Accounts are isolated by HOME.** Each account gets its own directory;
   `HOME`/`USERPROFILE`/`APPDATA`/`LOCALAPPDATA` are pointed at it when `agy` is spawned, so
-  each account keeps its own OAuth token.
+  each account keeps its own OAuth token. On Windows the CLI otherwise reads a single shared
+  keyring entry (`gemini:antigravity`) that ignores HOME, so isolated accounts also get
+  `SSH_CONNECTION` set: agy then stores the token in
+  `<home>/.gemini/antigravity-cli/antigravity-oauth-token` (file storage) instead. The system
+  account is left on the keyring.
 
 ---
 
@@ -109,7 +113,9 @@ Desktop app → **Settings → Antigravity**:
 - account list with Argon / Claude / Flash capability badges (probed with `agy models`)
 - **the Google account email** and sign-in state, decoded locally from the CLI's own
   `antigravity-oauth-token` (no network, no token reuse)
-- add / remove accounts, start the Google sign-in flow per account
+- add / remove accounts, and sign in **without a browser popping up**: the page shows the
+  OAuth link `agy acp --login` prints, so you can open it in whichever browser profile is
+  already signed in (ego, Chrome, ...) and paste the authorization code back
 - default tier, routing (`fixed` / `sequential` / `round-robin`), cooldown after a quota or
   auth failure
 - live usage counters, and **real quota** read with `agy --print=/usage` (10–30 s on a good

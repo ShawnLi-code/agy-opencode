@@ -85,13 +85,44 @@ OpenCode  ──OpenAI protocol──▶  http://127.0.0.1:<port>/v1  ──ACP�
                                           one session per conversation ┘
 ```
 
-- **Transport: ACP.** `agy acp` is a persistent JSON-RPC server: one process per account, one
-  session per conversation. Only the new input is sent each turn, and tokens stream as they
-  appear. `agy --print` remains as a fallback (one process per turn, whole history re-sent).
-- **Tool calls stay in OpenCode.** The model never executes a tool itself. It answers with
-  `{"tool_calls":[{"name":"read","arguments":{...}}]}`; OpenCode runs the tool, returns the
-  result, and the next turn continues. Approvals and sandboxing therefore behave normally.
-- **Tool-free agent.** On first run the plugin installs an agent preset
+- **Transport: ACP.** `agy acp` is a persistent JSON-RPC server: one supervisor per account,
+  one worker per session. Only the new input is sent each turn, and tokens stream as they
+  appear. A worker costs roughly 180 MB, so idle sessions are closed after 10 minutes and
+  at most 3 stay open; the session itself stays on disk, and `session/load` restores its
+  history when you return to that conversation. The bridge consumes the full ACP event
+  surface: `agent_message_chunk` text,
+  `agent_thought_chunk` thinking (`reasoning_content`), `tool_call` / `tool_call_update`,
+  and the per-turn `usage` (input, output, cache read/write, reasoning) plus `stopReason`.
+  `agy --print` remains as a fallback (one process per turn, whole history re-sent).
+- **Two tool modes.** In Settings → Antigravity, `native` ("agy 原生工具") lets agy execute
+  its own tools; its permission requests are auto-approved by default and OpenCode's
+  permissions and sandbox do not apply. Completed native steps are mirrored as real tool
+  calls: in Code Mode through the `execute` wrapper (which calls `agy_tool`), or directly
+  as `agy_tool` when the host exposes it. OpenCode renders its normal tool card, and the
+  mirror returns the output agy already recorded — the command is never run twice.
+  `bridged` ("OpenCode 工具") gives agy no built-in tools and passes OpenCode's tools
+  through a local MCP bridge instead. OpenCode executes them under its own permission
+  model and sandbox; a call blocks inside agy until OpenCode answers it. Changing mode
+  affects new requests.
+- **Turn boundaries and stopping.** Tool results are matched by call ID, not their
+  position in the full history. New questions and edited/retried messages cannot drain
+  a previous task's buffered answer. Disconnecting an active generation cancels its
+  ACP session; the next request bootstraps from role-labelled history with the current
+  question explicitly separated. Ordinary follow-ups and tool-result continuations
+  still reuse the session. Bun uses its native HTTP request cancellation signal rather
+  than the older `node:http` disconnect shim.
+- **Failure circuit breaker.** Five consecutive explicit tool failures stop the
+  current task in either mode, rather than continuously retrying and spending quota.
+  A successful tool result resets the count; a new user turn resets a tripped guard.
+  Nonzero shell exit markers become MCP `isError` results. On Windows, bridged
+  `shell` commands containing physical newlines are refused before execution;
+  write a script file using the file-edit tool and invoke its path instead. This
+  avoids a reproduced host-shell bug where only the first physical line executes.
+- **Activity watchdog, not a deadline.** A turn is not handed back just because time
+  passed. With no open tool step the provider waits 10 minutes of silence; while a tool is
+  running the budget is 4 hours. An exhausted budget is reported as an error, never as a
+  successful `stop`.
+- **Tool-free agent (bridged mode).** The plugin installs an agent preset
   (`tools: []`, `commandExecutionPolicy: off`) into
   `~/.gemini/antigravity-cli/gemini-root-config/agents/`. Without it agy tries to use its own
   tools, we must deny them, and the turn aborts with
@@ -131,10 +162,13 @@ Desktop app → **Settings → Antigravity**:
 | Picker needs the config block | Plugin-registered providers are visible to the model API but not to the model picker. The plugin writes/repairs the block above, but a restart is needed the first time. |
 | Timeout values must be integers | `timeout`/`headerTimeout`/`chunkTimeout` accept a positive integer only. `0` or `false` makes opencode drop the whole provider, silently removing the models from the picker. |
 | No quota without the CLI | Percentages come from `agy --print=/usage`. There is no local cache; nothing is read from private endpoints. A slow or offline `agy` means the read times out after 30 s. |
+| Upstream capacity 503 | `UNAVAILABLE (code 503): No capacity available` means upstream load, not a context limit. The provider waits 5 s / 15 s / 30 s and retries the SAME model; it never silently downgrades. After ~50 s it returns a plain-language message. |
 | Slow on long answers | A 3000-character SVG took 35–70 s. Short turns are ~15 s. agy queues requests upstream, so timings vary a lot. |
 | Full-width context per turn (print mode) | Only when the ACP transport is unavailable: history is re-sent each turn. |
-| Text-only tool results | Tool output is replayed to the model as `[TOOL RESULT name=…]` text. Single-step tool use is verified; long multi-step chains are not. |
+| Native cards are mirror cards | Native steps render as an `execute`/`agy_tool` card, not as OpenCode's own terminal/diff card. The title carries the original tool and command/path; the output is the real recorded result. |
+| Mirror replay is in-memory | Recorded outputs live for 15 minutes (max 500 entries). A replayed card older than that returns an explicit “output no longer held” result instead of re-running the command. |
 | One conversation key per chat | Sessions are keyed by the system prompt plus the first user message. Changing that prefix starts a new agy session. |
+| Worker lifetime | Idle workers are closed after 10 min (at most 3 open). Closing releases the process, not the conversation: the next message reloads the session with its history. Tune in Settings → Antigravity → 调用设置 (空闲回收 / 进程上限), or with `AGY_ACP_IDLE_MS`, `AGY_ACP_MAX_SESSIONS`, `AGY_ACP_KEEP_SESSIONS`, `AGY_ACP_SWEEP_MS`. |
 
 ---
 
@@ -144,9 +178,22 @@ Desktop app → **Settings → Antigravity**:
 npm install
 npm run build          # GUI bundle -> dist/gui-experimental.cjs
 npm run check          # protocol tests (no agy needed) + GUI render check
-node scripts/acp-check.mjs     # drives a real `agy acp` session
-node scripts/server-live.mjs   # full server + real agy, end to end
-node scripts/live-check.mjs    # hits a running bridge
+node scripts/acp-check.mjs              # drives a real `agy acp` session
+bun scripts/check-acp-native.mjs        # native tool mirror + watchdog + usage
+bun scripts/check-acp-sessions.mjs      # idle worker exit + session/load keeps context
+bun scripts/check-provider-acp.mjs      # native mode: thinking, usage, tool_calls
+bun scripts/check-provider-bridged.mjs  # bridged mode: real MCP tool call + resume
+bun scripts/check-mcp-bridge.mjs        # bare-string arguments, JSON wrapping, HTTP path
+bun scripts/check-provider-capacity.mjs # 503 wait-and-retry, friendly message, no downgrade
+bun scripts/check-models.mjs          # one family per model, so no effort is hidden in the picker
+npm run check:turns                    # deterministic lifecycle + HTTP + multi-step tool regressions; no quota
+npm run check:turns-live               # bounded real native follow-up / effort switch + bridged dependent tools
+npm run check:stop-live                # bounded real stream interruption in both modes
+npm run check:failure-live             # intentional real failures + circuit-breaker recovery in both modes
+npm run check:acceptance               # fail-fast offline acceptance, with per-suite logs
+npm run check:acceptance -- --live     # adds bounded real agy tests; consumes quota
+node scripts/server-live.mjs            # full server + real agy, end to end
+node scripts/live-check.mjs             # hits a running bridge
 ```
 
 | Path | Purpose |
@@ -154,6 +201,9 @@ node scripts/live-check.mjs    # hits a running bridge
 | `src/index.ts` | plugin entry (`{ id, setup }`) |
 | `src/agy-runner.ts` | spawns `agy`, timeouts, error classification |
 | `src/provider/server.ts` | OpenAI-compatible HTTP server |
+| `src/provider/http-server.ts` | Node/Bun HTTP transport with client-disconnect cancellation |
+| `src/provider/turn-safety.ts` | Per-turn tool/time/no-progress budgets |
+| `src/provider/turn-identity.ts` | Per-session/per-message identity headers for budget sharing |
 | `src/provider/acp.ts` | persistent ACP sessions |
 | `src/provider/protocol.ts` | prompt assembly + JSON envelope parsing |
 | `src/accounts.ts` | account model, HOME isolation, quota probe |

@@ -125,7 +125,7 @@ export function buildPrompt(messages: readonly OpenAIMessage[], tools?: readonly
       if (text) turns.push(`ASSISTANT:\n${text}`);
       if (calls.length > 0) {
         const payload = calls.map((c) => ({
-          name: c.function?.name ?? c.name ?? "unknown",
+          name: c.function?.name ?? (c as { name?: string }).name ?? "unknown",
           arguments: safeJson(c.function?.arguments),
         }));
         turns.push(`ASSISTANT TOOL CALLS:\n${JSON.stringify({ tool_calls: payload }, null, 1)}`);

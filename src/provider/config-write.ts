@@ -30,15 +30,19 @@
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { ALL_TIERS, TIER_LABEL } from "../tiers";
+import { readCatalogueCache, modelLabel } from "./catalogue";
 
 const MARK_START = "// >>> agy-opencode provider (managed) >>>";
 const MARK_END = "// <<< agy-opencode provider (managed) <<<";
 
 const PROVIDER_ID = "agy-cli";
 
-/** 15 minutes: long enough for any agy turn, valid for opencode 2.2.x. */
-const REQUEST_TIMEOUT_MS = 900_000;
+/**
+ * Four hours: the provider's own activity watchdog ends an idle turn, so the
+ * HTTP budget only has to outlast a legitimately long tool run. The old 15
+ * minutes cut long builds while agy was still working.
+ */
+const REQUEST_TIMEOUT_MS = 4 * 60 * 60 * 1000;
 
 /** `~/.config/opencode/opencode.json` (or `.jsonc`), never both at once. */
 export function defaultConfigPath(): string {
@@ -201,8 +205,10 @@ function apiKeyOf(valueText: string): string | null {
 
 /** The provider object itself, without its key or any separator. */
 function providerValue(port: number, apiKey = "agy-cli-local"): string {
-  const models = ALL_TIERS.map(
-    (t) => `    ${JSON.stringify(t)}: { "name": ${JSON.stringify(TIER_LABEL[t])} }`,
+  const models = readCatalogueCache().flatMap((m) =>
+    (m.efforts.length ? m.efforts : [undefined]).map((effort) =>
+      `    ${JSON.stringify(effort ? `${m.id}-${effort}` : m.id)}: { "name": ${JSON.stringify(modelLabel(m, effort))} }`,
+    ),
   ).join(",\n");
 
   return [
@@ -266,6 +272,8 @@ export function readProviderPort(path = defaultConfigPath()): number | null {
  */
 export function ensureProviderConfig(port: number, path = defaultConfigPath()): EnsureResult {
   try {
+    // Never replace a usable model list with an empty failed discovery.
+    if (readCatalogueCache().length === 0) return { changed: false, path, error: "model catalogue unavailable" };
     if (!existsSync(path)) return { changed: false, path, error: "config not found" };
 
     const original = readFileSync(path, "utf8");

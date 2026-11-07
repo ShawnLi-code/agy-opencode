@@ -266,7 +266,9 @@ export function readIdentity(account: Account): AccountIdentity {
     const payload = jwtPayload(data?.id_token) ?? jwtPayload(access);
     const expiry = typeof data?.token?.expiry === "string" ? Date.parse(data.token.expiry) : NaN;
     return {
-      email: typeof payload?.email === "string" ? payload.email : undefined,
+      email: typeof data?.id_token_email === "string" && data.id_token_email.trim()
+        ? data.id_token_email.trim()
+        : typeof payload?.email === "string" ? payload.email : undefined,
       name: typeof payload?.name === "string" ? payload.name : undefined,
       loggedIn: typeof access === "string" && access.length > 0,
       expired: Number.isFinite(expiry) ? expiry < Date.now() : undefined,
@@ -455,12 +457,14 @@ export function createAccount(alias: string): Account {
 }
 
 export function removeAccount(id: string, purgeHome = false): boolean {
-  if (id === SYSTEM_ACCOUNT_ID) return false;
   const data = loadAccounts();
   const target = data.accounts.find((a) => a.id === id);
   if (!target) return false;
+  // Keep a routable account. Removing the system entry never touches its
+  // credentials: its empty home points at the user's real profile.
+  if (data.accounts.length <= 1) return false;
   data.accounts = data.accounts.filter((a) => a.id !== id);
-  if (data.activeAccountId === id) data.activeAccountId = SYSTEM_ACCOUNT_ID;
+  if (data.activeAccountId === id) data.activeAccountId = (data.accounts.find((a) => a.enabled) ?? data.accounts[0]).id;
   saveAccounts(data);
   if (purgeHome && target.home) {
     try {

@@ -1,6 +1,7 @@
 import { runAgy, AgyError, isValidConversationId, redactError, scrubSecrets, type AgyResult } from "./agy-runner";
 import { createAgyCommand, upsertRegistryEntry } from "./agy-command";
 import { loadAccounts, pickAccount, recordResult, accountEnv } from "./accounts";
+import { replayToolResult } from "./provider/replay";
 import { skillMarkdown as agySkillMarkdown } from "./md.generated";
 
 /**
@@ -98,6 +99,28 @@ export const AGY_V2_TOOL_SCHEMA = {  type: "object",
     },
   },
   required: ["prompt"],
+  additionalProperties: false,
+} as const;
+
+/** Arguments of the internal replay tool: a cursor into the recorded steps. */
+export const AGY_REPLAY_SCHEMA = {
+  type: "object",
+  properties: {
+    id: {
+      type: "string",
+      description: "Recorded agy tool step id. Internal to the agy provider.",
+    },
+    // Presentation-only fields. The executor reads `id`; these make the card
+    // readable instead of showing an opaque replay cursor.
+    tool: { type: "string", description: "Original agy tool name." },
+    title: { type: "string", description: "Original agy tool title." },
+    input: {
+      type: "object",
+      description: "Identifying arguments of the original tool step.",
+      additionalProperties: true,
+    },
+  },
+  required: ["id"],
   additionalProperties: false,
 } as const;
 
@@ -357,6 +380,21 @@ export async function setupV2Plugin(ctx: any): Promise<void> {
             return formatV2Error(err);
           }
         },
+      }, defined);
+
+      // The provider mirrors completed agy tool steps through this replay tool.
+      // It never executes anything: the output was already produced by agy, and
+      // re-running it would duplicate side effects.
+      upsertRegistryEntry(editor, "agy_tool", {
+        name: "agy_tool",
+        description:
+          "Internal replay of a tool step Antigravity (agy) already executed. " +
+          "The agy provider emits this automatically so the step renders as a native tool card. " +
+          "It returns recorded output only; do not call it directly and do not treat it as a new execution.",
+        schema: AGY_REPLAY_SCHEMA,
+        input: AGY_REPLAY_SCHEMA,
+        parameters: AGY_REPLAY_SCHEMA,
+        execute: async (args: any) => replayToolResult(String(args?.id ?? "")),
       }, defined);
     });
   }

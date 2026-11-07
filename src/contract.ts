@@ -45,6 +45,11 @@ export const StateSchema = Effect.Schema.Struct({
   defaultTier: Effect.Schema.String,
   routing: Effect.Schema.String,
   cooldownMs: Effect.Schema.Number,
+  agentMode: Effect.Schema.String,
+  autoApproveNative: Effect.Schema.Boolean,
+  acpIdleMinutes: Effect.Schema.Number,
+  acpMaxSessions: Effect.Schema.Number,
+  nextAccountId: Effect.Schema.String,
   accounts: Effect.Schema.Array(AccountSchema),
 });
 
@@ -72,8 +77,17 @@ export const AgyAccounts = Ipc.define({
     setDefaultTier: { input: Effect.Schema.Struct({ tier: Effect.Schema.String }), output: Effect.Schema.Boolean },
     /** Pick how the next account is chosen: active / sequential / roundrobin. */
     setRouting: { input: Effect.Schema.Struct({ routing: Effect.Schema.String }), output: Effect.Schema.Boolean },
+    setAgentMode: { input: Effect.Schema.Struct({ mode: Effect.Schema.String }), output: Effect.Schema.Boolean },
     /** How long an account rests after a quota/auth failure, in minutes. */
     setCooldown: { input: Effect.Schema.Struct({ minutes: Effect.Schema.Number }), output: Effect.Schema.Boolean },
+    /** Idle/min-open limits for the ACP worker pool. */
+    setAcpLimits: {
+      input: Effect.Schema.Struct({
+        idleMinutes: Effect.Schema.Number,
+        maxSessions: Effect.Schema.Number,
+      }),
+      output: Effect.Schema.Boolean,
+    },
     /** Clear a cooldown so the account is used again immediately. */
     clearCooldown: { input: Effect.Schema.Struct({ id: Effect.Schema.String }), output: Effect.Schema.Boolean },
     /** Reset the local usage counters for an account. */

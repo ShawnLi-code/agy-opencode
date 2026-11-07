@@ -54,9 +54,9 @@ try {
   const modelsRes = await fetch(base + "/v1/models");
   const models = await modelsRes.json();
   const ids = (models.data ?? []).map((m) => m.id);
-  check("GET /v1/models returns 13 tiers", ids.length === 13, `${ids.length} models`);
-  check("argon-4-lo present", ids.includes("argon-4-lo"));
-  check("gpt-oss-med present", ids.includes("gpt-oss-med"));
+  check("GET /v1/models returns a catalogue", ids.length > 0, `${ids.length} models`);
+  check("flash family present", ids.some((id) => id.includes("gemini-3.8-flash")), JSON.stringify(ids.slice(0, 4)));
+  check("model ids are unique", new Set(ids).size === ids.length, `${ids.length} ids`);
 
   // --------------------------------------------------- non-stream, plain text
   nextReply = '{"content":"hello from agy"}';
@@ -177,4 +177,6 @@ try {
 const failed = results.filter((r) => !r.pass);
 console.log(`\n${results.length - failed.length}/${results.length} passed`);
 console.log(failed.length === 0 ? "RESULT: PASS" : "RESULT: FAIL");
-process.exit(failed.length === 0 ? 0 : 1);
+// Let closed HTTP/esbuild handles drain. Forced exit can trip libuv's
+// UV_HANDLE_CLOSING assertion on Windows even after every check passed.
+process.exitCode = failed.length === 0 ? 0 : 1;

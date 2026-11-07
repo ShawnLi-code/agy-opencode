@@ -6,6 +6,10 @@ import { startProvider, type ProviderServer } from "./provider/server";
 import { runTier } from "./provider/run";
 import { registerProvider, PROVIDER_ID } from "./provider/register";
 import { ensureProviderConfig, readProviderPort, type EnsureResult } from "./provider/config-write";
+import { acpPool } from "./provider/acp";
+import { loadAccounts, pickAccount } from "./accounts";
+import { settingsFromEnv } from "./provider/settings";
+import { registerTurnIdentity } from "./provider/turn-identity";
 
 /**
  * agy-opencode - server half.
@@ -23,6 +27,13 @@ import { ensureProviderConfig, readProviderPort, type EnsureResult } from "./pro
 /** Held on globalThis so hot reloads reuse one listener instead of leaking ports. */
 const SERVER_KEY = Symbol.for("agy-opencode.provider.server");
 const TRANSPORT_KEY = Symbol.for("agy-opencode.provider.transport");
+const VERSION_KEY = Symbol.for("agy-opencode.provider.version");
+/**
+ * Bumped whenever the bridge's wire behavior changes. A hot reload keeps the
+ * old listener on the port, so without this the plugin would register new
+ * tools while requests still hit the previous module's server.
+ */
+const SERVER_VERSION = 19;
 
 function probe(patch: Record<string, unknown>): void {
   try {
@@ -36,13 +47,36 @@ function probe(patch: Record<string, unknown>): void {
   }
 }
 
+/**
+ * The account discovery probes with.
+ *
+ * Same routing as a real turn, so the catalogue describes the account the
+ * user will actually run on. Falls back to the system account when the store
+ * is unreadable, which is also what `pickAccount` would do.
+ */
+function resolveAccountForDiscovery() {
+  try {
+    return pickAccount(loadAccounts());
+  } catch {
+    return { id: "system", alias: "system", home: "", enabled: true, createdAt: 0 } as any;
+  }
+}
+
 async function ensureServer(): Promise<ProviderServer> {
   const g = globalThis as any;
 
-  // Reuse the live bridge across hot reloads. Closing it and rebinding the port
-  // fails (the old listener still holds it), and losing the bridge also loses
-  // the provider registration — which is exactly how the models disappeared.
-  if (g[SERVER_KEY]) return g[SERVER_KEY] as ProviderServer;
+  // Reuse only a bridge built by this module version. An older one is closed
+  // first: reusing it meant the model picker showed new tools while requests
+  // still ran the previous server code.
+  if (g[SERVER_KEY] && g[VERSION_KEY] === SERVER_VERSION) return g[SERVER_KEY] as ProviderServer;
+  if (g[SERVER_KEY]) {
+    try {
+      await (g[SERVER_KEY] as ProviderServer).close();
+    } catch (err: any) {
+      console.warn("[agy-opencode] old bridge close failed:", String(err?.message ?? err));
+    }
+    g[SERVER_KEY] = null;
+  }
 
   g[SERVER_KEY] = await startProvider({
     // Bind the port the config already points at, so a restart cannot leave the
@@ -52,12 +86,18 @@ async function ensureServer(): Promise<ProviderServer> {
     run: (tier, prompt) => runTier(tier, prompt, { timeout: "10m" }),
   });
   g[TRANSPORT_KEY] = "acp";
+  g[VERSION_KEY] = SERVER_VERSION;
   return g[SERVER_KEY] as ProviderServer;
 }
 
 export default {
   id: "agy-opencode",
   async setup(ctx: any) {
+    // Read once: the mode decides which agy agent to spawn, and a running
+    // prompt cannot change agent mid-conversation anyway.
+    const settings = settingsFromEnv();
+    await registerTurnIdentity(ctx);
+
     // Start the bridge first: the provider record needs its URL.
     let bridge: ProviderServer | null = null;
     let startedError: string | null = null;
@@ -89,9 +129,24 @@ export default {
     // reads the port recorded there, and this block keeps it valid.
     const configuredPort = readProviderPort();
 
+    // Discovery has to happen before registration: the picker is built from
+    // the catalogue, and hardcoding model ids is what made every selection
+    // silently run the account default.
+    let catalogueSize = 0;
+    let discoverError: string | null = null;
+    if (bridge) {
+      try {
+        const models = await bridge.pool.discover(resolveAccountForDiscovery());
+        catalogueSize = models.length;
+        if (models.length) configEnsure = ensureProviderConfig(bridge.port);
+      } catch (err: any) {
+        discoverError = String(err?.message ?? err).slice(0, 200);
+      }
+    }
+
     if (bridge && typeof ctx?.provider?.transform === "function") {
       try {
-        diag = await registerProvider(ctx, bridge.url);
+        diag = await registerProvider(ctx, bridge.url, bridge.pool.models(), settings.contextWindow);
         registered = diag?.outcome ?? null;
       } catch (err: any) {
         registerError = String(err?.message ?? err).slice(0, 400);
@@ -129,6 +184,8 @@ export default {
       published,
       providerID: PROVIDER_ID,
       hasProviderTransform: typeof ctx?.provider?.transform,
+      agentMode: settings.agentMode,
+      contextWindow: settings.contextWindow,
     });
 
     return setupV2Plugin(ctx);

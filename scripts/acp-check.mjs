@@ -42,7 +42,7 @@ try {
   // ---- turn 1
   const chunks1 = [];
   let firstChunkAt = 0;
-  const reply1 = await pool.turn({
+  const reply1 = (await pool.turn({
     conversationKey: key,
     account,
     inputs: ["Count from 1 to 40, separated by spaces, nothing else."],
@@ -50,7 +50,7 @@ try {
       if (!firstChunkAt) firstChunkAt = Date.now() - t0;
       chunks1.push(c);
     },
-  });
+  })).text;
   const elapsed1 = Date.now() - t0;
 
   check("turn 1 produced text", reply1.length > 0, JSON.stringify(reply1.slice(0, 60)));
@@ -65,12 +65,12 @@ try {
   // ---- turn 2: same conversation, only the new input is sent
   t0 = Date.now();
   const chunks2 = [];
-  const reply2 = await pool.turn({
+  const reply2 = (await pool.turn({
     conversationKey: key,
     account,
     inputs: ["Count from 1 to 40, separated by spaces, nothing else.", "Now reply with exactly: BANANA"],
     onChunk: (c) => chunks2.push(c),
-  });
+  })).text;
 
   check("turn 2 produced text", reply2.length > 0, JSON.stringify(reply2.slice(0, 60)));
   check("turn 2 contains BANANA", /BANANA/i.test(reply2));
@@ -88,12 +88,12 @@ try {
     "USER:",
     "Read C:\\Windows\\win.ini with the read tool.",
   ].join("\n");
-  const reply3 = await pool.turn({
+  const reply3 = (await pool.turn({
     conversationKey: key + "-tools",
     account,
     inputs: [protocol],
     onChunk: (c) => chunks3.push(c),
-  });
+  })).text;
   const json = (reply3.match(/\{[\s\S]*\}/) ?? [""])[0];
   let parsed = null;
   try {

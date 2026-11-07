@@ -60,6 +60,9 @@ const STATE = {
   defaultTier: "argon-4-lo",
   routing: "active",
   cooldownMs: 900000,
+  agentMode: "native",
+  autoApproveNative: true,
+  nextAccountId: "system",
   accounts: [
     {
       id: "system",
@@ -86,8 +89,6 @@ const STATE = {
         "gpt-oss-120b-medium",
       ],
       checkedAt: Date.now() - 3600e3,
-      email: "user@example.com",
-      loggedIn: true,
       usage: [
         { group: "Gemini Models", label: "Weekly Limit Remaining", percent: 71, resetAt: iso(2880) },
         { group: "Gemini Models", label: "Five Hour Limit Remaining", percent: 98, resetAt: iso(30) },
@@ -95,25 +96,26 @@ const STATE = {
         { group: "Claude and GPT models", label: "Five Hour Limit Remaining", percent: 88, resetAt: iso(120) },
         { group: "Gemini 4 Argon", label: "Gemini 4 Argon Weekly Limit", percent: 59, resetAt: iso(4320) },
       ],
-      usageCheckedAt: Date.now() - 60_000,
+      usageCheckedAt: 0,
     },
+    { id: "other", alias: "账号 2", home: "test", enabled: true, createdAt: 1, email: "second@example.test" },
   ],
 };
+STATE.accounts[1].usage = STATE.accounts[0].usage;
 
+let usageCalls = 0;
 const client = {
-  read: async () => STATE,
+  read: async () => structuredClone(STATE),
   add: async () => STATE.accounts[0],
   remove: async () => true,
   probe: async () => STATE.accounts[0],
-  usage: async () => STATE.accounts[0],
-  setActive: async () => true,
+  usage: async () => { usageCalls++; return STATE.accounts[0]; },
+  setActive: async ({ id }) => { STATE.activeAccountId = id; STATE.nextAccountId = id; return true; },
   setDefaultTier: async () => true,
   setRouting: async () => true,
   setCooldown: async () => true,
   clearCooldown: async () => true,
-  login: async () => ({ url: "https://accounts.google.com/o/oauth2/auth?demo=1" }),
-  loginCode: async () => ({ ok: true, email: "user@example.com" }),
-  loginCancel: async () => true,
+  login: async () => true,
 };
 
 let page = null;
@@ -143,6 +145,10 @@ solid.createRoot(() => {
   solidWeb.insert(root, solidWeb.createComponent(() => page.render({})));
 });
 await new Promise((r) => setTimeout(r, 150));
+
+const switchBtn = [...root.querySelectorAll("button")].find((b) => b.textContent.trim() === "设为默认");
+switchBtn?.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
+await new Promise((r) => setTimeout(r, 60));
 
 // Open the tier picker so its options mount.
 const tierBtn = [...root.querySelectorAll("button")].find((b) => /Argon/i.test(b.textContent || ""));
@@ -174,7 +180,6 @@ console.log("disabled buttons:", JSON.stringify(disabled));
 console.log("quota rows:", (text.match(/Limit Remaining|Argon Weekly Limit/g) || []).length);
 console.log("clipped by ancestor:", clippedBy ?? "no");
 console.log("alias rendered:", text.includes("系统账号"));
-console.log("email rendered:", text.includes("user@example.com"));
 
 let ok = true;
 const fail = (m) => {
@@ -184,29 +189,13 @@ const fail = (m) => {
 if (optionCount !== 13) fail(`expected 13 tier options, got ${optionCount}`);
 if (clippedBy) fail("dropdown is clipped by " + clippedBy);
 if (!text.includes("系统账号")) fail("account row missing");
-if (!text.includes("user@example.com")) fail("account email missing");
 if (!text.includes("Weekly Limit Remaining")) fail("quota rows missing");
 if (!text.includes("71%")) fail("quota percentage missing");
 if (!buttons.some((b) => b.includes("轮询"))) fail("routing buttons missing");
 if (disabled.length > 0) fail("unexpected disabled buttons: " + JSON.stringify(disabled));
-
-// Sign-in: clicking 登录 must show the OAuth link and a code field instead of
-// opening a browser with a fresh profile.
-const loginBtn = [...root.querySelectorAll("button")].find((b) => b.textContent.trim() === "登录");
-if (!loginBtn) {
-  fail("login button missing");
-} else {
-  loginBtn.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true }));
-  await new Promise((r) => setTimeout(r, 500));
-  const inputs = [...root.querySelectorAll("input")];
-  const afterLogin = root.textContent || "";
-  const hasLoginLink = inputs.some((i) => (i.value || "").includes("accounts.google.com"));
-  const hasCodeInput = inputs.some((i) => (i.getAttribute("placeholder") || "").includes("授权码"));
-  console.log("login link rendered:", hasLoginLink);
-  if (!hasLoginLink) fail("login link not shown");
-  if (!afterLogin.includes("完成登录")) fail("authorization-code step missing");
-  if (!hasCodeInput) fail("code input missing");
-}
+if (usageCalls !== 0) fail("quota read unexpectedly started on mount");
+if (!switchBtn || STATE.activeAccountId !== "other") fail("switching account failed");
+if (!text.includes("下次路由：账号 2")) fail("selected account not displayed after switching");
 
 console.log(ok ? "\nRESULT: PASS" : "\nRESULT: FAIL");
 process.exit(ok ? 0 : 1);

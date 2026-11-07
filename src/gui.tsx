@@ -249,17 +249,8 @@ export default Plugin.define({
 
         const activeUsage = createMemo(() => activeAccount()?.usage ?? []);
 
-        // Load quota once per mount when the cached reading is stale. The
-        // reading comes from the official `agy --print=/usage` command.
-        let autoTried = false;
-        createEffect(() => {
-          const s = state();
-          if (!s || autoTried) return;
-          autoTried = true;
-          const acc = s.accounts.find((a) => a.id === s.activeAccountId);
-          const fresh = acc?.usageCheckedAt && Date.now() - acc.usageCheckedAt < 5 * 60 * 1000;
-          if (!fresh) void run("usage", () => client.usage({ id: s.activeAccountId }));
-        });
+        // Quota reads can take 30 seconds. Do not start one automatically:
+        // it used to occupy the shared busy state and silently block all buttons.
 
         function barColor(percent: number): string {
           if (percent >= 50) return T.green;
@@ -279,11 +270,12 @@ export default Plugin.define({
         }
 
         async function run(key: string, fn: () => Promise<unknown>, okMsg?: string) {
-          if (busy()) return;
+          if (busy()) { setMsg("另一项操作正在进行，请稍候。"); return; }
           setBusy(key);
           setMsg("");
           try {
-            await fn();
+            const result = await fn();
+            if (result === false) throw new Error("操作未完成，请检查账号状态后重试。");
             if (okMsg) setMsg(okMsg);
             await refetch();
           } catch (e: any) {
@@ -307,7 +299,7 @@ export default Plugin.define({
         // that link instead of letting agy pick a browser: the user can open it
         // in the browser profile that is already signed in (ego, Chrome, ...).
         async function startLogin(id: string) {
-          if (busy()) return;
+          if (busy()) { setMsg("另一项操作正在进行，请稍候。"); return; }
           setBusy(`login-${id}`);
           setMsg("");
           setLoginError("");
@@ -396,12 +388,35 @@ export default Plugin.define({
             <Show when={state.error}>
               <div style={{ color: T.red, "margin-bottom": "14px", "font-size": "12px" }}>读取失败：{String(state.error)}</div>
             </Show>
+            <Show when={msg()}>
+              <div role="status" style={{ color: T.muted, "margin-bottom": "14px", "font-size": "12px" }}>{msg()}</div>
+            </Show>
 
             <Show when={state()}>
               {(data) => (
                 <>
+                  <div style={{ ...label, "margin-top": "26px" }}>工具执行方式</div>
+                  <div style={{ ...cardClip, padding: "14px" }}>
+                    <div style={{ display: "flex", gap: "8px", "flex-wrap": "wrap" }}>
+                      <For each={[["bridged", "OpenCode 工具"], ["native", "agy 原生工具"]]}>
+                        {([mode, title]) => (
+                          <button style={{ ...btnStyle(), "border-color": data().agentMode === mode ? T.accent : T.border }}
+                            disabled={busy() === "mode"}
+                            onClick={() => run("mode", () => client.setAgentMode({ mode }), "执行方式已保存，新请求生效")}>{title}</button>
+                        )}
+                      </For>
+                    </div>
+                    <p style={{ color: T.muted, "font-size": "12px", "line-height": 1.6, margin: "10px 0 0" }}>
+                      {data().agentMode === "native"
+                        ? (data().autoApproveNative ? "当前：agy 自己执行工具并自动批准权限，不受 OpenCode 权限和沙箱约束。" : "当前：agy 自己执行工具；自动批准已关闭，不受 OpenCode 权限和沙箱约束。")
+                        : "当前：通过 MCP 交给 OpenCode 执行工具，使用 OpenCode 权限控制。"}
+                    </p>
+                  </div>
                   {/* ---------------- 账号 ---------------- */}
                   <div style={{ ...label, "margin-top": "26px" }}>账号</div>
+                  <div style={{ color: T.muted, "font-size": "12px", "margin-bottom": "8px" }}>
+                    下次路由：{data().accounts.find((a) => a.id === (data().nextAccountId || data().activeAccountId))?.alias ?? "未确定"}（实际请求时重新选择）
+                  </div>
                   <div style={cardClip}>
                     <For each={data().accounts}>
                       {(acc) => {
@@ -459,7 +474,7 @@ export default Plugin.define({
                                     </span>
                                   }
                                 >
-                                  <span style={{ color: T.muted, font: `11.5px ${T.mono}` }}>{acc.email}</span>
+                                  <span style={{ color: T.muted, font: `11.5px ${T.mono}` }}>{acc.alias === acc.email ? "" : acc.email}{acc.id === "system" ? "（本地 token，系统钥匙串可能不同）" : ""}</span>
                                 </Show>
                                 <span style={{ color: T.faint, "font-size": "10px" }} title={acc.id}>
                                   {acc.id}
@@ -506,22 +521,25 @@ export default Plugin.define({
                                   解除
                                 </button>
                               </Show>
-                              <Show when={acc.id !== "system"}>
-                                <Show when={!isActive}>
+                              <Show when={!isActive}>
                                   <button
                                     style={btnStyle()}
                                     onClick={() => run(acc.id, () => client.setActive({ id: acc.id }), "已切换默认账号")}
                                   >
                                     设为默认
                                   </button>
-                                </Show>
+                              </Show>
                                 <button
                                   style={btnStyle("danger")}
-                                  onClick={() => run(acc.id, () => client.remove({ id: acc.id }), "已删除")}
+                                  disabled={data().accounts.length <= 1}
+                                  title={acc.id === "system" ? "仅移除插件内的入口，不删除系统登录凭证" : "仅移除插件内的账号入口"}
+                                  onClick={() => {
+                                    if (window.confirm(acc.id === "system" ? "移除系统账号入口？不会删除系统登录凭证。" : "移除此账号入口？不会删除登录凭证。"))
+                                      void run(acc.id, () => client.remove({ id: acc.id }), "账号入口已移除");
+                                  }}
                                 >
                                   删除
                                 </button>
-                              </Show>
                             </div>
                           </div>
                         );
@@ -658,10 +676,26 @@ export default Plugin.define({
                       </div>
                       <div style={{ position: "relative", "justify-self": "start" }}>
                         <button
-                          style={{ ...btnStyle(), "min-width": "250px", "text-align": "left" }}
+                          style={{
+                            ...btnStyle(),
+                            "min-width": "250px",
+                            display: "flex",
+                            "align-items": "center",
+                            "justify-content": "space-between",
+                            gap: "12px",
+                            // The host's neutral button token is translucent;
+                            // over the glass background this control became
+                            // unreadable. Use the opaque base surface instead.
+                            background: "var(--v2-background-bg-base, #16191f)",
+                            "border-color": T.borderStrong,
+                            color: T.base,
+                            "font-weight": 500,
+                            opacity: 1,
+                          }}
                           onClick={() => setPicker((v) => !v)}
                         >
-                          {TIER_LABEL[tier()] ?? tier()} {picker() ? "▴" : "▾"}
+                          <span>{TIER_LABEL[tier()] ?? tier()}</span>
+                          <span style={{ color: T.muted, "font-size": "10px" }}>{picker() ? "▲" : "▼"}</span>
                         </button>
                         <Show when={picker()}>
                           <div
@@ -777,6 +811,88 @@ export default Plugin.define({
                         <span style={{ color: T.faint, "font-size": "11.5px" }}>分钟</span>
                       </div>
                     </div>
+
+                    <div style={row}>
+                      <div>
+                        <div style={{ "font-size": "12.5px" }}>空闲回收</div>
+                        <div style={{ color: T.faint, "font-size": "11px", "margin-top": "2px" }}>
+                          超时后关闭 worker，回来时自动恢复上下文
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", "align-items": "center", gap: "8px", "justify-self": "start" }}>
+                        <input
+                          type="number"
+                          min="1"
+                          max="1440"
+                          value={data().acpIdleMinutes ?? 10}
+                          onChange={(e) => {
+                            const minutes = Number(e.currentTarget.value);
+                            if (!Number.isFinite(minutes) || minutes < 1) return;
+                            void run(
+                              "acp-idle",
+                              () =>
+                                client.setAcpLimits({
+                                  idleMinutes: minutes,
+                                  maxSessions: data().acpMaxSessions ?? 3,
+                                }),
+                              "已保存",
+                            );
+                          }}
+                          style={{
+                            width: "64px",
+                            "font-size": "12px",
+                            padding: "5px 8px",
+                            "border-radius": "6px",
+                            border: `1px solid ${T.border}`,
+                            background: T.layer1,
+                            color: T.base,
+                            outline: "none",
+                          }}
+                        />
+                        <span style={{ color: T.faint, "font-size": "11.5px" }}>分钟</span>
+                      </div>
+                    </div>
+
+                    <div style={row}>
+                      <div>
+                        <div style={{ "font-size": "12.5px" }}>进程上限</div>
+                        <div style={{ color: T.faint, "font-size": "11px", "margin-top": "2px" }}>
+                          同时保留的 agy worker 数量
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", "align-items": "center", gap: "8px", "justify-self": "start" }}>
+                        <input
+                          type="number"
+                          min="1"
+                          max="16"
+                          value={data().acpMaxSessions ?? 3}
+                          onChange={(e) => {
+                            const sessions = Number(e.currentTarget.value);
+                            if (!Number.isFinite(sessions) || sessions < 1) return;
+                            void run(
+                              "acp-max",
+                              () =>
+                                client.setAcpLimits({
+                                  idleMinutes: data().acpIdleMinutes ?? 10,
+                                  maxSessions: sessions,
+                                }),
+                              "已保存",
+                            );
+                          }}
+                          style={{
+                            width: "64px",
+                            "font-size": "12px",
+                            padding: "5px 8px",
+                            "border-radius": "6px",
+                            border: `1px solid ${T.border}`,
+                            background: T.layer1,
+                            color: T.base,
+                            outline: "none",
+                          }}
+                        />
+                        <span style={{ color: T.faint, "font-size": "11.5px" }}>个</span>
+                      </div>
+                    </div>
                   </div>
 
                   {/* ---------------- 额度 ---------------- */}
@@ -877,9 +993,6 @@ export default Plugin.define({
                       </div>
                     </Show>
                   </div>
-                  <Show when={msg()}>
-                    <div style={{ "margin-top": "14px", color: T.muted, "font-size": "11.5px" }}>{msg()}</div>
-                  </Show>
                 </>
               )}
             </Show>
@@ -891,6 +1004,7 @@ export default Plugin.define({
 
   async main(ctx) {
     const accounts = await import("./accounts");
+    const providerSettings = await import("./provider/settings");
 
     type LoginSession = { child: any; output: string; timer: ReturnType<typeof setTimeout> };
     const logins = new Map<string, LoginSession>();
@@ -920,13 +1034,18 @@ export default Plugin.define({
 
     function snapshot() {
       const data = accounts.loadAccounts();
+      const settings = providerSettings.settingsFromEnv();
       const enriched = data.accounts.map((a) => {
         // Identity is a local file read (`id_token`), so it is always current
         // and never depends on the slow `agy models` probe.
         const ident = accounts.readIdentity(a);
+        const email = ident.email ?? a.email;
+        // Preserve user-chosen aliases; replace only the generated defaults.
+        const automaticAlias = a.id === "system" || /^账号\s*\d+$/.test(a.alias);
         return {
           ...a,
-          email: ident.email ?? a.email,
+          alias: automaticAlias && email ? email : a.alias,
+          email,
           name: ident.name ?? a.name,
         };
       });
@@ -935,6 +1054,11 @@ export default Plugin.define({
         defaultTier: data.defaultTier,
         routing: data.routing,
         cooldownMs: data.cooldownMs,
+        agentMode: settings.agentMode,
+        autoApproveNative: settings.autoApproveNative,
+        acpIdleMinutes: settings.acpIdleMinutes,
+        acpMaxSessions: settings.acpMaxSessions,
+        nextAccountId: accounts.pickAccount(data).id,
         accounts: enriched,
       };
     }
@@ -1021,10 +1145,23 @@ export default Plugin.define({
         return true;
       },
 
+      setAgentMode: async ({ mode }) => {
+        if (mode !== "native" && mode !== "bridged") return false;
+        providerSettings.writeSettings({ agentMode: mode });
+        return true;
+      },
+
       setCooldown: async ({ minutes }) => {
         const data = accounts.loadAccounts();
         data.cooldownMs = Math.max(60_000, Math.min(240, minutes) * 60_000);
         accounts.saveAccounts(data);
+        return true;
+      },
+
+      setAcpLimits: async ({ idleMinutes, maxSessions }) => {
+        const idle = Math.max(1, Math.min(1440, Math.round(idleMinutes)));
+        const max = Math.max(1, Math.min(16, Math.round(maxSessions)));
+        providerSettings.writeSettings({ acpIdleMinutes: idle, acpMaxSessions: max });
         return true;
       },
 

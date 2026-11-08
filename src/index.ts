@@ -33,7 +33,7 @@ const VERSION_KEY = Symbol.for("agy-opencode.provider.version");
  * old listener on the port, so without this the plugin would register new
  * tools while requests still hit the previous module's server.
  */
-const SERVER_VERSION = 24;
+const SERVER_VERSION = 25;
 
 function probe(patch: Record<string, unknown>): void {
   try {
@@ -188,7 +188,37 @@ export default {
       contextWindow: settings.contextWindow,
     });
 
-    return setupV2Plugin(ctx);
+    const v2 = setupV2Plugin(ctx);
+
+    // Model catalogues differ per account (one may offer Argon while another
+    // does not). Discovery ran for the account active at load time, so watch
+    // the setting and re-register when the user picks a different default.
+    let watched = resolveAccountForDiscovery()?.id ?? "";
+    let stopped = false;
+    const timer = setInterval(() => {
+      if (stopped) return;
+      void (async () => {
+        try {
+          const account = resolveAccountForDiscovery();
+          if (!account || account.id === watched) return;
+          watched = account.id;
+          if (!bridge) return;
+          const models = await bridge.pool.discover(account, true);
+          if (models.length === 0) return;
+          await registerProvider(ctx, bridge.url, models, settingsFromEnv().contextWindow);
+          if (typeof ctx?.provider?.reload === "function") await ctx.provider.reload();
+        } catch {
+          /* the next tick retries; a failed probe must not empty the picker */
+        }
+      })();
+    }, 4_000);
+    (timer as any).unref?.();
+
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+      if (typeof (v2 as any) === "function") (v2 as any)();
+    };
   },
 };
 

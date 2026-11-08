@@ -1082,6 +1082,12 @@ export default Plugin.define({
           name: ident.name ?? a.name,
         };
       });
+      // Keep the default account at the top: the list is a picker, and the
+      // account every request uses should not be buried half way down.
+      const ordered = [...enriched].sort((a, b) => {
+        const rank = (row: typeof a) => (row.id === data.activeAccountId ? 0 : 1);
+        return rank(a) - rank(b);
+      });
       return {
         activeAccountId: data.activeAccountId,
         defaultTier: data.defaultTier,
@@ -1093,7 +1099,7 @@ export default Plugin.define({
         acpMaxSessions: settings.acpMaxSessions,
         contextWindow: settings.contextWindow,
         nextAccountId: accounts.pickAccount(data).id,
-        accounts: enriched,
+        accounts: ordered,
       };
     }
 

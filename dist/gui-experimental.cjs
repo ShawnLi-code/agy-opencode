@@ -1188,6 +1188,10 @@ const gui = gui$1.Plugin.define({
           name: ident.name ?? a.name
         };
       });
+      const ordered = [...enriched].sort((a, b) => {
+        const rank = (row2) => row2.id === data.activeAccountId ? 0 : 1;
+        return rank(a) - rank(b);
+      });
       return {
         activeAccountId: data.activeAccountId,
         defaultTier: data.defaultTier,
@@ -1199,7 +1203,7 @@ const gui = gui$1.Plugin.define({
         acpMaxSessions: settings2.acpMaxSessions,
         contextWindow: settings2.contextWindow,
         nextAccountId: accounts$1.pickAccount(data).id,
-        accounts: enriched
+        accounts: ordered
       };
     }
     ctx.provide(AgyAccounts, {

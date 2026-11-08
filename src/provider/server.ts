@@ -248,20 +248,21 @@ export function toOpenAIUsage(usage: AcpUsage | undefined): {
   completion_tokens_details?: { reasoning_tokens: number };
 } | undefined {
   if (!usage) return undefined;
-  // Prompt occupancy includes cached tokens in the OpenAI shape; agy reports
-  // them as separate counters.
-  const prompt =
-    (usage.inputTokens ?? 0) +
-    (usage.cachedReadTokens ?? 0) +
-    (usage.cachedWriteTokens ?? 0);
+  // agy's `inputTokens` already counts the whole prompt, cached part included.
+  // Its `cachedReadTokens` is a per-turn cache-hit counter that keeps growing
+  // across internal tool steps (one 8-step turn reported 200k of "cache" for a
+  // 44k context), so adding it double-counted the prompt and made opencode
+  // believe a 44k conversation was at 96% of a 256k window.
+  const prompt = usage.inputTokens ?? 0;
   const completion = usage.outputTokens ?? 0;
+  const cached = Math.min(usage.cachedReadTokens ?? 0, prompt);
   const total = usage.totalTokens ?? prompt + completion;
   return {
     prompt_tokens: prompt,
     completion_tokens: completion,
     total_tokens: total,
     ...(usage.cachedReadTokens !== undefined
-      ? { prompt_tokens_details: { cached_tokens: usage.cachedReadTokens } }
+      ? { prompt_tokens_details: { cached_tokens: cached } }
       : {}),
     ...(usage.thoughtTokens !== undefined
       ? { completion_tokens_details: { reasoning_tokens: usage.thoughtTokens } }

@@ -1,5 +1,27 @@
 # Turn regression notes — 2026-11-08
 
+## Usage accounting fix — 2026-11-08
+
+agy's `inputTokens` already counts the whole prompt, cached part included. Its
+`cachedReadTokens` is a per-turn cache-hit counter that grows with every
+internal tool step: one 8-step turn reported `input 44,102 / cache 200,495` for
+a conversation whose real size was ~44k. Adding the two made opencode show
+244.6k of a 256k window (96%) and start compaction after the second message.
+
+Measured on this machine:
+
+| case | input | cache | reported before | real context |
+|---|---|---|---|---|
+| fresh, no tool | 21,638 | 0 | 21,638 | 21,638 |
+| one tool step | 23,809 | 19,590 | 43,399 | 23,809 |
+| three tool steps | 28,138 | 59,158 | 87,296 | ~28k |
+| eight tool steps | 44,102 | 200,495 | 244,597 | ~44k |
+
+`toOpenAIUsage` now reports `inputTokens` as the prompt and clamps the cached
+detail to it, so opencode's context bar and auto-compaction use the real size.
+Verified after the fix: the one-tool session reports 4,218 input + 19,591 cached
+= 23,809 total instead of 43,399.
+
 ## Incident evidence
 
 The interrupted last turn of the reported conversation contained 226 tool calls

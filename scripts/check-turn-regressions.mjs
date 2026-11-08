@@ -13,7 +13,7 @@ for (const name of ["acp", "tool-bridge", "server", "turn-safety"]) {
 }
 const { AcpPool } = await import(pathToFileURL(join(dir, "acp.mjs")).href);
 const { ToolBridge, toBridgeResult } = await import(pathToFileURL(join(dir, "tool-bridge.mjs")).href);
-const { acpHistory, startProvider } = await import(pathToFileURL(join(dir, "server.mjs")).href);
+const { acpHistory, startProvider, toOpenAIUsage } = await import(pathToFileURL(join(dir, "server.mjs")).href);
 const { TurnSafety } = await import(pathToFileURL(join(dir, "turn-safety.mjs")).href);
 const watchdog = setTimeout(() => { console.error("FAIL regression deadline (20s)"); process.exit(1); }, 20_000);
 let passed = 0;
@@ -73,6 +73,14 @@ try {
     assert.ok(history.indexOf("NEW") < history.indexOf('"role":"assistant"'), "current request comes before the background transcript");
     assert.ok(history.includes("CURRENT USER REQUEST"));
     assert.ok(history.includes("context only"));
+  });
+
+  await test("usage: agy's inputTokens already includes cached reads", () => {
+    const usage = toOpenAIUsage({ inputTokens: 44102, outputTokens: 1807, cachedReadTokens: 200495 });
+    assert.equal(usage.prompt_tokens, 44102, "prompt must not add the cumulative cache counter");
+    assert.equal(usage.prompt_tokens_details.cached_tokens, 44102, "cached detail must be bounded by the prompt");
+    const plain = toOpenAIUsage({ inputTokens: 21638, outputTokens: 1 });
+    assert.equal(plain.prompt_tokens, 21638);
   });
 
   await test("tool errors: exact shell exit markers become MCP isError", () => {

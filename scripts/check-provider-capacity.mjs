@@ -129,6 +129,30 @@ const request = (base, model) =>
   }
 }
 
+// ---- transport failures are reported as transport, not as a raw Winsock error ----
+{
+  const server = await startProvider({
+    transport: "acp",
+    port: 0,
+    turn: async () => {
+      throw new Error(
+        'Post "https://daily-cloudcode-pa.googleapis.com/v1internal:streamGenerateContent?alt=sse": write tcp 127.0.0.1:57366->127.0.0.1:7897: wsasend: An existing connection was forcibly closed by the remote host.',
+      );
+    },
+  });
+  try {
+    const res = await request(server.url, "gemini-3.8-flash-high");
+    const body = await res.json();
+    const message = String(body.error?.message ?? "");
+    check("transport: classified separately", body.error?.code === "AGY_TRANSPORT", JSON.stringify(body.error?.code));
+    check("transport: no raw Winsock text", !/wsasend|127\.0\.0\.1:7897|streamGenerateContent/.test(message), message);
+    check("transport: names the likely cause", message.includes("代理"), message);
+    check("transport: distinguishes model failures", !/模型不可用/.test(message) || message.includes("不是模型不可用"), message);
+  } finally {
+    await server.close();
+  }
+}
+
 const failed = results.filter((r) => !r.pass);
 console.log(`\n${results.length - failed.length}/${results.length} passed`);
 console.log(failed.length === 0 ? "RESULT: PASS" : "RESULT: FAIL");

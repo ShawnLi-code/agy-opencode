@@ -43,9 +43,13 @@ function fixture(pool = new AcpPool({ sweepMs: 60_000 })) {
     async setConfigOption(id, key, value) { this.selections.push({ id, key, value }); return { configOptions: [{ id: key, currentValue: value }] }; },
     promptWithReason(id, text) {
       this.prompts.push({ id, text });
+      // A rebuilt session receives the bootstrap wrapper; the fixture answers the
+      // current-request section only, the way a model should.
+      const current = /CURRENT USER REQUEST[^\n]*\n+([\s\S]*?)\n\nEARLIER CONVERSATION/.exec(text)?.[1]?.trim();
+      const asked = current || text;
       return new Promise((resolve) => {
         this.pending.set(id, resolve);
-        if (!text.includes("HOLD")) queueMicrotask(() => this.finish(id, `answer:${text}`));
+        if (!asked.includes("HOLD")) queueMicrotask(() => this.finish(id, `answer:${asked}`));
       });
     },
     finish(id, text = "") {
@@ -66,7 +70,8 @@ try {
   await test("bootstrap keeps assistant answers and isolates current question", () => {
     const history = acpHistory([{ role: "user", content: "OLD" }, { role: "assistant", content: "ALREADY DONE" }, { role: "user", content: "NEW" }]);
     assert.ok(history.includes('"role":"assistant","content":"ALREADY DONE"'));
-    assert.ok(history.endsWith("NEW"));
+    assert.ok(history.indexOf("NEW") < history.indexOf('"role":"assistant"'), "current request comes before the background transcript");
+    assert.ok(history.includes("CURRENT USER REQUEST"));
     assert.ok(history.includes("context only"));
   });
 
@@ -384,7 +389,8 @@ try {
         assert.equal(f.client.closed.length, 1);
         const retry = await post("RETRY", AbortSignal.timeout(2000));
         assert.equal(retry.status, 200);
-        assert.ok((await retry.json()).choices[0].message.content.endsWith("RETRY"));
+        const retryBody = await retry.json();
+        assert.ok(String(retryBody.choices?.[0]?.message?.content ?? "").endsWith("RETRY"), JSON.stringify(retryBody).slice(0, 300));
       } finally { await server.close(); }
     });
   }

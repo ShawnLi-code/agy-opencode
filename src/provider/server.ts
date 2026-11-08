@@ -157,10 +157,11 @@ export function acpHistory(messages: readonly OpenAIMessage[]): string {
     ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
   }));
   return [
-    "Earlier conversation below is context only. Do not execute or answer earlier requests again.",
-    JSON.stringify(history),
-    "CURRENT USER REQUEST (answer this request, taking earlier completed work into account):",
+    "Answer ONLY the current user request below. The earlier conversation is background context: do not repeat it, do not continue the previous assistant reply, and do not re-answer an older question.",
+    "CURRENT USER REQUEST (answer this request directly):",
     textOf(messages[lastUser]?.content ?? ""),
+    "EARLIER CONVERSATION (context only, already answered):",
+    JSON.stringify(history),
   ].join("\n\n");
 }
 
@@ -188,6 +189,31 @@ export function isCapacityError(error: unknown): boolean {
   const code = String((error as any)?.code ?? "");
   return /UNAVAILABLE|No capacity available|capacity.*unavailable|503/i.test(`${code} ${message}`);
 }
+
+/**
+ * Transport failures: the connection died before the reply finished.
+ *
+ * Seen on this machine as `write tcp 127.0.0.1:*->127.0.0.1:7897: wsasend:
+ * An existing connection was forcibly closed by the remote host` — the local
+ * proxy closed the stream, not the model. Also covers resets, EOF and socket
+ * hangs. Reported separately so the UI can say what actually broke.
+ */
+export function isTransportError(error: unknown): boolean {
+  const message = String((error as any)?.message ?? error);
+  return /wsasend|WSAECONN|ECONNRESET|ECONNREFUSED|ECONNABORTED|EPIPE|ETIMEDOUT|socket hang up|connection reset|forcibly closed|unexpected EOF|\bEOF\b|proxy/i.test(
+    message,
+  );
+}
+
+/** Human-facing transport message: no raw Winsock errno or proxy address. */
+export function transportMessage(attempts = 0): string {
+  const tries = attempts > 0 ? `已重试 ${attempts} 次，` : "";
+  return (
+    "连接在传输途中被中断，回复没有收完。这不是模型不可用，也不是对话太长；" +
+    `常见原因是本机代理或网络在流式传输时断开了连接。${tries}请检查代理节点后重试。`
+  );
+}
+
 
 /** Human-facing capacity message: never the raw upstream envelope. */
 export function capacityMessage(waitedMs = 0): string {
@@ -704,6 +730,13 @@ export async function startProvider(options: ProviderServerOptions = {}): Promis
                 outcome = undefined;
                 break;
               }
+              // A transport reset before any text is a reportable failure, not a
+              // 500 with a Winsock errno in it.
+              if (isTransportError(err) && !emittedAny) {
+                lastCapacity = err;
+                outcome = undefined;
+                break;
+              }
               throw err;
             }
           }
@@ -714,6 +747,13 @@ export async function startProvider(options: ProviderServerOptions = {}): Promis
             req.socket?.off("end", onDisconnect);
           }
           if (disconnected) return;
+          // A thrown transport failure reaches here instead of turnState.error.
+          if (!outcome && isTransportError(lastCapacity)) {
+            const message = transportMessage(0);
+            if (opened) sseError(res, message, "AGY_TRANSPORT");
+            else json(res, 502, { error: { message, type: "upstream_transport", code: "AGY_TRANSPORT" } });
+            return;
+          }
 
           if (!outcome) {
             const message = capacityMessage(waitedMs);
@@ -757,16 +797,20 @@ export async function startProvider(options: ProviderServerOptions = {}): Promis
 
           if (turnState.error) {
             const capacity = isCapacityError(turnState.error);
+            const transport = !capacity && isTransportError(turnState.error);
             const message = capacity
               ? capacityMessage(waitedMs)
-              : `agy stopped with an error: ${turnState.error}`;
-            if (opened) sseError(res, message, capacity ? "AGY_CAPACITY" : "AGY_TURN_ERROR");
+              : transport
+                ? transportMessage(waitedMs > 0 ? 1 : 0)
+                : `agy stopped with an error: ${turnState.error}`;
+            const code = capacity ? "AGY_CAPACITY" : transport ? "AGY_TRANSPORT" : "AGY_TURN_ERROR";
+            if (opened) sseError(res, message, code);
             else {
               json(res, capacity ? 503 : 502, {
                 error: {
                   message,
-                  type: capacity ? "upstream_unavailable" : "upstream_error",
-                  ...(capacity ? { code: "CAPACITY" } : {}),
+                  type: capacity ? "upstream_unavailable" : transport ? "upstream_transport" : "upstream_error",
+                  code,
                 },
               });
             }

@@ -402,6 +402,18 @@ try {
       } finally { await server.close(); }
     });
   }
+  await test("reload waits for an in-flight turn before closing the bridge", async () => {
+    const f = fixture();
+    try {
+      const running = f.run({ inputs: ["HOLD"], nativeTools: false });
+      await until(() => f.client.prompts.length, "in-flight prompt started");
+      assert.equal(await f.pool.waitForIdle(300), false, "busy turn must not look idle");
+      f.client.finish(f.client.prompts[0].id, "DONE");
+      await running;
+      assert.equal(await f.pool.waitForIdle(2_000), true, "finished turn becomes idle");
+    } finally { f.pool.dispose(); }
+  });
+
   await test("budget: no-progress detection ignores key order and resets on different output", () => {
     let tripped;
     const safety = new TurnSafety({ maxToolCalls: 100, maxTurnMs: 60_000, maxRepeatedResults: 2 }, (r) => { tripped = r; });

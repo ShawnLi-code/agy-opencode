@@ -33,7 +33,7 @@ const VERSION_KEY = Symbol.for("agy-opencode.provider.version");
  * old listener on the port, so without this the plugin would register new
  * tools while requests still hit the previous module's server.
  */
-const SERVER_VERSION = 21;
+const SERVER_VERSION = 22;
 
 function probe(patch: Record<string, unknown>): void {
   try {

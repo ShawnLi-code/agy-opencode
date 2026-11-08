@@ -1089,6 +1089,23 @@ export class AcpPool {
   }
 
   /**
+   * Waits for running turns before a reload closes the bridge.
+   *
+   * Closing the MCP bridge or killing the ACP workers mid-turn makes every
+   * in-flight tool call fail, and agy then narrates those failures as text.
+   * A reload should wait for the current turn to finish instead.
+   */
+  async waitForIdle(timeoutMs = 30_000): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const busy = [...this.sessions.values()].some((state) => state.inFlight === true || (state.pendingReplays?.length ?? 0) > 0);
+      if (!busy) return true;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    return false;
+  }
+
+  /**
    * Closes idle sessions and enforces the open-worker cap.
    *
    * Runs on every turn and on a timer, because the old sweep only ran when a

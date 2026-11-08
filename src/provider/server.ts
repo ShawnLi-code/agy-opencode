@@ -1015,6 +1015,9 @@ export async function startProvider(options: ProviderServerOptions = {}): Promis
     server: running,
     pool: acpPool,
     close: async () => {
+      // A reload must not kill a turn that is still using the MCP bridge: the
+      // tool calls would fail and agy would narrate them as text.
+      await acpPool.waitForIdle(30_000);
       for (const { safety } of budgets.values()) safety.finish();
       budgets.clear();
       await acpPool.settleStops();

@@ -214,6 +214,20 @@ export function transportMessage(attempts = 0): string {
   );
 }
 
+/** agy's own stream deadline (`context deadline exceeded`) — not a 5xx. */
+export function isIdleTimeoutError(error: unknown): boolean {
+  const message = String((error as any)?.message ?? error);
+  return /stream idle timeout|context deadline exceeded|deadline exceeded/i.test(message);
+}
+
+export function idleTimeoutMessage(model?: string): string {
+  const which = model ? `（${model}）` : "";
+  return (
+    `模型${which}在 agy 内部超时，没有产出任何内容。` +
+    "常见原因：该模型在 ACP 模式下无响应，或上游排队过久。请重试，或换用其它模型。"
+  );
+}
+
 
 /** Human-facing capacity message: never the raw upstream envelope. */
 export function capacityMessage(waitedMs = 0): string {
@@ -422,7 +436,26 @@ export async function startProvider(options: ProviderServerOptions = {}): Promis
           model: echoed,
         };
 
-        if (transport === "acp") {
+        // agy's ACP worker never answers for Gemini 4 Argon (flash returns in
+        // seconds, Argon stalls until the caller gives up), while the CLI print
+        // path answers normally. In native mode agy owns its tools anyway, so a
+        // tool-free print turn is a faithful fallback; bridged mode cannot use it
+        // without silently bypassing OpenCode's tools, so it fails fast instead.
+        const argonModel = /^gemini-4-argon/i.test(model ?? "");
+        const nativeMode = (configuredSettings ?? settingsFromEnv()).agentMode === "native";
+        if (transport === "acp" && argonModel && !nativeMode) {
+          const message =
+            "Gemini 4 Argon 在 agy 的 ACP 模式下不会返回内容（实测挂起，属上游问题）。" +
+            "请切换到「agy 原生工具」模式（会自动改用 CLI 打印模式），或先选择其他模型。";
+          if (streaming) {
+            sseHeaders(res);
+            sseError(res, message, "AGY_MODEL_UNSUPPORTED");
+          } else json(res, 409, { error: { message, type: "model_unsupported", code: "AGY_MODEL_UNSUPPORTED" } });
+          return;
+        }
+        const argonPrintFallback = transport === "acp" && argonModel && nativeMode && !!run;
+
+        if (transport === "acp" && !argonPrintFallback) {
           // Set when the requested model could not be applied. The turn still
           // runs (agy keeps its current model), so this is reported to the
           // caller instead of failing the request outright. A holder is used
@@ -733,7 +766,7 @@ export async function startProvider(options: ProviderServerOptions = {}): Promis
               }
               // A transport reset before any text is a reportable failure, not a
               // 500 with a Winsock errno in it.
-              if (isTransportError(err) && !emittedAny) {
+              if ((isTransportError(err) || isIdleTimeoutError(err)) && !emittedAny) {
                 lastCapacity = err;
                 outcome = undefined;
                 break;
@@ -749,6 +782,12 @@ export async function startProvider(options: ProviderServerOptions = {}): Promis
           }
           if (disconnected) return;
           // A thrown transport failure reaches here instead of turnState.error.
+          if (!outcome && isIdleTimeoutError(lastCapacity)) {
+            const message = idleTimeoutMessage(model);
+            if (opened) sseError(res, message, "AGY_IDLE_TIMEOUT");
+            else json(res, 504, { error: { message, type: "upstream_timeout", code: "AGY_IDLE_TIMEOUT" } });
+            return;
+          }
           if (!outcome && isTransportError(lastCapacity)) {
             const message = transportMessage(0);
             if (opened) sseError(res, message, "AGY_TRANSPORT");
@@ -799,12 +838,15 @@ export async function startProvider(options: ProviderServerOptions = {}): Promis
           if (turnState.error) {
             const capacity = isCapacityError(turnState.error);
             const transport = !capacity && isTransportError(turnState.error);
+            const idle = !capacity && !transport && isIdleTimeoutError(turnState.error);
             const message = capacity
               ? capacityMessage(waitedMs)
               : transport
                 ? transportMessage(waitedMs > 0 ? 1 : 0)
-                : `agy stopped with an error: ${turnState.error}`;
-            const code = capacity ? "AGY_CAPACITY" : transport ? "AGY_TRANSPORT" : "AGY_TURN_ERROR";
+                : idle
+                  ? idleTimeoutMessage(model)
+                  : `agy stopped with an error: ${turnState.error}`;
+            const code = capacity ? "AGY_CAPACITY" : transport ? "AGY_TRANSPORT" : idle ? "AGY_IDLE_TIMEOUT" : "AGY_TURN_ERROR";
             if (opened) sseError(res, message, code);
             else {
               json(res, capacity ? 503 : 502, {
@@ -931,7 +973,7 @@ export async function startProvider(options: ProviderServerOptions = {}): Promis
 
         let rawReply: string;
         try {
-          rawReply = await run!(model ?? "", buildPrompt(messages, tools));
+          rawReply = await run!(model ?? "", buildPrompt(messages, argonPrintFallback ? [] : tools));
         } catch (err: any) {
           json(res, 502, {
             error: {

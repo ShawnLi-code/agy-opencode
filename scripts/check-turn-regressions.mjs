@@ -467,5 +467,34 @@ try {
     } finally { await server.close(); }
   });
 
+  await test("argon: native mode falls back to the CLI print path; bridged refuses with a clear code", async () => {
+    const calls = [];
+    const native = await startProvider({ transport: "acp", port: 0,
+      settings: { agentMode: "native", autoApproveNative: true, taskBudget: { maxToolCalls: 10, maxTurnMs: 60_000, maxRepeatedResults: 10 } },
+      resolveAccount: () => account,
+      run: async (model, prompt) => { calls.push({ model, prompt }); return '{"content":"ARGON OK"}'; },
+      turn: async () => { throw new Error("ACP must not be used for argon"); },
+    });
+    try {
+      const r = await fetch(native.url + "/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: "gemini-4-argon-medium", messages: [{ role: "user", content: "hi" }], tools: [{ function: { name: "read" } }] }), signal: AbortSignal.timeout(3000) });
+      assert.equal(r.status, 200);
+      assert.equal((await r.json()).choices[0].message.content, "ARGON OK");
+      assert.equal(calls[0].model, "gemini-4-argon-medium");
+      assert.ok(!calls[0].prompt.includes('"name":"read"'), "native fallback must not forward opencode tool schemas");
+    } finally { await native.close(); }
+
+    const bridged = await startProvider({ transport: "acp", port: 0,
+      settings: { agentMode: "bridged", autoApproveNative: false }, resolveAccount: () => account,
+      turn: async () => { throw new Error("ACP must not be used for argon"); },
+    });
+    try {
+      const r = await fetch(bridged.url + "/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: "gemini-4-argon-medium", messages: [{ role: "user", content: "hi" }] }), signal: AbortSignal.timeout(3000) });
+      assert.equal(r.status, 409);
+      assert.equal((await r.json()).error.code, "AGY_MODEL_UNSUPPORTED");
+    } finally { await bridged.close(); }
+  });
+
   console.log(`RESULT: PASS (${passed} scenarios, no model requests)`);
 } finally { clearTimeout(watchdog); }

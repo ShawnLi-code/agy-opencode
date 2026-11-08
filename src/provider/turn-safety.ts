@@ -7,10 +7,18 @@ export interface TurnLimits {
 }
 export const DEFAULT_TURN_LIMITS: TurnLimits = {
   maxToolCalls: 200,
-  maxTurnMs: 20 * 60_000,
+  maxTurnMs: 4 * 60 * 60_000,
   maxRepeatedResults: 8,
 };
 export interface SafetyStop { code: string; message: string }
+
+/** Human-readable total time without exposing implementation milliseconds. */
+export function formatTurnDuration(ms: number): string {
+  if (ms % 3_600_000 === 0) return `${ms / 3_600_000} 小时`;
+  if (ms % 60_000 === 0) return `${ms / 60_000} 分钟`;
+  if (ms % 1_000 === 0) return `${ms / 1_000} 秒`;
+  return `${ms} 毫秒`;
+}
 
 /** One user turn, not one HTTP span. All limits are finite and fail closed. */
 export class TurnSafety {
@@ -26,7 +34,7 @@ export class TurnSafety {
     for (const value of Object.values(limits)) {
       if (!Number.isSafeInteger(value) || value <= 0) throw new Error("Turn safety limits must be positive finite integers");
     }
-    this.timer = setTimeout(() => this.stop("AGY_TURN_TIME_LIMIT", `本轮已达到总时长上限 ${limits.maxTurnMs}ms`), limits.maxTurnMs);
+    this.timer = setTimeout(() => this.stop("AGY_TURN_TIME_LIMIT", `本轮已达到总时长上限（${formatTurnDuration(limits.maxTurnMs)}）`), limits.maxTurnMs);
     this.timer.unref?.();
   }
 
@@ -59,7 +67,7 @@ export class TurnSafety {
 
   stop(code: string, detail: string): void {
     if (this.reason || this.ended) return;
-    this.reason = { code, message: `${code}: ${detail}。已暂停本轮，避免继续消耗；请发送新消息继续，或先提高 taskBudget 对应上限。` };
+    this.reason = { code, message: `${code}: ${detail}。已停止本轮，避免继续消耗。你可以发送新消息继续，或调整任务保护配置后再试。` };
     this.finish();
     this.onStop(this.reason);
   }

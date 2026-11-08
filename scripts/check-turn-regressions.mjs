@@ -361,11 +361,11 @@ try {
         messages.push({ role: "assistant", content: null, tool_calls: [call] }, { role: "tool", tool_call_id: call.id, content: JSON.stringify({ isError: true, content: [{ type: "text", text: "controlled tool failure" }] }) });
       }
       const stopped = await request();
-      assert.equal(stopped.status, 409);
+      assert.equal(stopped.status, 400);
       assert.equal(stopped.body.error.code, "AGY_TOOL_FAILURE_LIMIT");
       assert.equal(executions, 5);
       const repeated = await request();
-      assert.equal(repeated.status, 409);
+      assert.equal(repeated.status, 400);
       assert.equal(executions, 5);
       messages.push({ role: "user", content: "I fixed the environment. Retry now." });
       assert.equal((await request()).status, 200);
@@ -431,6 +431,38 @@ try {
     other.finish();
   });
 
+  await test("budget: time stop is terminal for the same streamed turn and resets on a new turn", async () => {
+    let calls = 0;
+    const server = await startProvider({ transport: "acp", port: 0,
+      settings: { agentMode: "native", autoApproveNative: false, taskBudget: { maxToolCalls: 200, maxTurnMs: 30, maxRepeatedResults: 8 } },
+      resolveAccount: () => account,
+      turn: async (options) => {
+        calls++;
+        if (calls === 1) {
+          await new Promise((resolve) => setTimeout(resolve, 70));
+          return { text: "", parked: false, error: options.safety.reason?.message };
+        }
+        return { text: "NEW TURN OK", parked: false };
+      },
+    });
+    const headers = { "content-type": "application/json", "x-agy-session-id": "ses_timeout_test", "x-agy-turn-id": "turn_one" };
+    const body = { stream: true, messages: [{ role: "user", content: "first" }] };
+    try {
+      const first = await fetch(server.url + "/v1/chat/completions", { method: "POST", headers, body: JSON.stringify(body), signal: AbortSignal.timeout(2000) });
+      assert.equal(first.status, 200);
+      assert.match(await first.text(), /AGY_TURN_TIME_LIMIT/);
+      const retry = await fetch(server.url + "/v1/chat/completions", { method: "POST", headers, body: JSON.stringify(body), signal: AbortSignal.timeout(2000) });
+      assert.equal(retry.status, 400);
+      assert.equal((await retry.json()).error.code, "AGY_TURN_TIME_LIMIT");
+      assert.equal(calls, 1, "a retry of a stopped turn must not start a second prompt");
+      const next = await fetch(server.url + "/v1/chat/completions", { method: "POST", headers: { ...headers, "x-agy-turn-id": "turn_two" },
+        body: JSON.stringify({ messages: [{ role: "user", content: "next" }] }), signal: AbortSignal.timeout(2000) });
+      assert.equal(next.status, 200);
+      assert.equal((await next.json()).choices[0].message.content, "NEW TURN OK");
+      assert.equal(calls, 2);
+    } finally { await server.close(); }
+  });
+
   await test("budget: tool count is shared across HTTP spans; a new user turn gets a fresh budget", async () => {
     const bridge = new ToolBridge();
     let parks = 0, accepted = new Set();
@@ -461,39 +493,37 @@ try {
         messages.push({ role: "assistant", content: null, tool_calls: [call] }, { role: "tool", tool_call_id: call.id, content: `result-${i}` });
       }
       assert.ok(accepted.size <= 2, `budget must accept at most two tool calls (accepted=${accepted.size})`);
-      assert.equal((await request()).status, 409, "a tool-result retry must not bypass the budget");
+      assert.equal((await request()).status, 400, "a tool-result retry must not bypass the budget");
+      const parksBeforeRetry = parks;
+      const streamingRetry = await fetch(server.url + "/v1/chat/completions", { method: "POST", headers,
+        body: JSON.stringify({ stream: true, messages, tools: [{ function: { name: "probe" } }] }), signal: AbortSignal.timeout(2000) });
+      assert.equal(streamingRetry.status, 400, "a stopped streaming turn must return non-retryable HTTP status before SSE starts");
+      assert.match((await streamingRetry.json()).error.code, /^AGY_/);
+      assert.equal(parks, parksBeforeRetry, "a rejected retry must not invoke the runner");
       messages.push({ role: "user", content: "new work" });
       assert.equal((await request({ "x-agy-turn-id": "msg_two" })).status, 200);
     } finally { await server.close(); }
   });
 
-  await test("argon: native mode falls back to the CLI print path; bridged refuses with a clear code", async () => {
-    const calls = [];
-    const native = await startProvider({ transport: "acp", port: 0,
-      settings: { agentMode: "native", autoApproveNative: true, taskBudget: { maxToolCalls: 10, maxTurnMs: 60_000, maxRepeatedResults: 10 } },
-      resolveAccount: () => account,
-      run: async (model, prompt) => { calls.push({ model, prompt }); return '{"content":"ARGON OK"}'; },
-      turn: async () => { throw new Error("ACP must not be used for argon"); },
-    });
-    try {
-      const r = await fetch(native.url + "/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ model: "gemini-4-argon-medium", messages: [{ role: "user", content: "hi" }], tools: [{ function: { name: "read" } }] }), signal: AbortSignal.timeout(3000) });
-      assert.equal(r.status, 200);
-      assert.equal((await r.json()).choices[0].message.content, "ARGON OK");
-      assert.equal(calls[0].model, "argon-4-med", "print runner takes tier names, not agy model slugs");
-      assert.ok(!calls[0].prompt.includes('"name":"read"'), "native fallback must not forward opencode tool schemas");
-    } finally { await native.close(); }
-
-    const bridged = await startProvider({ transport: "acp", port: 0,
-      settings: { agentMode: "bridged", autoApproveNative: false }, resolveAccount: () => account,
-      turn: async () => { throw new Error("ACP must not be used for argon"); },
-    });
-    try {
-      const r = await fetch(bridged.url + "/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ model: "gemini-4-argon-medium", messages: [{ role: "user", content: "hi" }] }), signal: AbortSignal.timeout(3000) });
-      assert.equal(r.status, 409);
-      assert.equal((await r.json()).error.code, "AGY_MODEL_UNSUPPORTED");
-    } finally { await bridged.close(); }
+  await test("argon: native and bridged modes both use ACP", async () => {
+    for (const mode of ["native", "bridged"]) {
+      const calls = [];
+      const server = await startProvider({ transport: "acp", port: 0,
+        settings: { agentMode: mode, autoApproveNative: mode === "native", taskBudget: { maxToolCalls: 10, maxTurnMs: 60_000, maxRepeatedResults: 10 } },
+        resolveAccount: () => account,
+        run: async () => { throw new Error("print must not be used"); },
+        turn: async (options) => { calls.push(options); return { text: "ARGON OK", parked: false }; },
+      });
+      try {
+        const r = await fetch(server.url + "/v1/chat/completions", { method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ model: "gemini-4-argon-medium", messages: [{ role: "user", content: "hi" }] }), signal: AbortSignal.timeout(3000) });
+        assert.equal(r.status, 200);
+        assert.equal((await r.json()).choices[0].message.content, "ARGON OK");
+        assert.equal(calls.length, 1);
+        assert.equal(calls[0].model, "gemini-4-argon-medium");
+        assert.equal(calls[0].nativeTools, mode === "native");
+      } finally { await server.close(); }
+    }
   });
 
   console.log(`RESULT: PASS (${passed} scenarios, no model requests)`);

@@ -12,4 +12,14 @@ export async function registerTurnIdentity(ctx: any): Promise<void> {
     const turn = latest.get(event.sessionID);
     if (turn) event.headers["x-agy-turn-id"] = turn;
   }, { providerID: "agy-cli" });
+  // These are intentional, terminal task-budget decisions, not transient API
+  // failures. Retrying the same turn only repeats the same stop and may keep
+  // OpenCode's UI stuck in its retry loop. Other providers/errors are untouched.
+  await ctx.session.hook("retry", (event: any) => {
+    if (event?.model?.providerID !== "agy-cli") return;
+    const message = typeof event?.error?.message === "string" ? event.error.message : "";
+    if (/\b(?:AGY_TURN_TIME_LIMIT|AGY_TOOL_CALL_LIMIT|AGY_NO_PROGRESS|AGY_TOOL_FAILURE_LIMIT)\b/.test(message)) {
+      event.decision = { retry: false };
+    }
+  }, { providerID: "agy-cli" });
 }

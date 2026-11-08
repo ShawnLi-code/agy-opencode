@@ -224,8 +224,8 @@ export function isIdleTimeoutError(error: unknown): boolean {
 export function idleTimeoutMessage(model?: string): string {
   const which = model ? `（${model}）` : "";
   return (
-    `模型${which}在 agy 内部超时，没有产出任何内容。` +
-    "常见原因：该模型在 ACP 模式下无响应，或上游排队过久。请重试，或换用其它模型。"
+    `模型${which}的请求超时。` +
+    "可能是上游响应缓慢或连接异常；请重试，或暂时换用其他模型。"
   );
 }
 
@@ -437,26 +437,7 @@ export async function startProvider(options: ProviderServerOptions = {}): Promis
           model: echoed,
         };
 
-        // agy's ACP worker never answers for Gemini 4 Argon (flash returns in
-        // seconds, Argon stalls until the caller gives up), while the CLI print
-        // path answers normally. In native mode agy owns its tools anyway, so a
-        // tool-free print turn is a faithful fallback; bridged mode cannot use it
-        // without silently bypassing OpenCode's tools, so it fails fast instead.
-        const argonModel = /^gemini-4-argon/i.test(model ?? "");
-        const nativeMode = (configuredSettings ?? settingsFromEnv()).agentMode === "native";
-        if (transport === "acp" && argonModel && !nativeMode) {
-          const message =
-            "Gemini 4 Argon 在 agy 的 ACP 模式下不会返回内容（实测挂起，属上游问题）。" +
-            "请切换到「agy 原生工具」模式（会自动改用 CLI 打印模式），或先选择其他模型。";
-          if (streaming) {
-            sseHeaders(res);
-            sseError(res, message, "AGY_MODEL_UNSUPPORTED");
-          } else json(res, 409, { error: { message, type: "model_unsupported", code: "AGY_MODEL_UNSUPPORTED" } });
-          return;
-        }
-        const argonPrintFallback = transport === "acp" && argonModel && nativeMode && !!run;
-
-        if (transport === "acp" && !argonPrintFallback) {
+        if (transport === "acp") {
           // Set when the requested model could not be applied. The turn still
           // runs (agy keeps its current model), so this is reported to the
           // caller instead of failing the request outright. A holder is used
@@ -484,12 +465,6 @@ export async function startProvider(options: ProviderServerOptions = {}): Promis
           let pending = "";
           let opened = false;
           let emittedAny = false;
-
-          if (streaming) {
-            sseHeaders(res);
-            send(res, { ...base, choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }] });
-            opened = true;
-          }
 
           // Thinking is a separate channel from the answer. It streams as
           // `reasoning_content`, which the openai-compatible adapter already
@@ -581,9 +556,16 @@ export async function startProvider(options: ProviderServerOptions = {}): Promis
           const safety = budget.safety;
           const deliveredStop = safety.getReason();
           if (deliveredStop) {
-            if (opened) sseError(res, deliveredStop.message, deliveredStop.code);
-            else json(res, 409, { error: { message: deliveredStop.message, type: "task_budget", code: deliveredStop.code } });
+            // Check before SSE headers: 409 is retryable in the OpenAI SDK,
+            // whereas a terminal budget stop must not be retried as an outage.
+            json(res, 400, { error: { message: deliveredStop.message, type: "invalid_request_error", code: deliveredStop.code } });
             return;
+          }
+
+          if (streaming) {
+            sseHeaders(res);
+            send(res, { ...base, choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }] });
+            opened = true;
           }
 
           // With tools, agy talks to opencode over MCP: the schema list goes
@@ -630,12 +612,12 @@ export async function startProvider(options: ProviderServerOptions = {}): Promis
             await acpPool.cancel(conversation, toolFailure);
             bridge.cancelCalls(conversation);
             if (opened) sseError(res, toolFailure, "AGY_TOOL_FAILURE_LIMIT");
-            else json(res, 409, { error: { message: toolFailure, type: "tool_failure_limit", code: "AGY_TOOL_FAILURE_LIMIT" } });
+            else json(res, 400, { error: { message: toolFailure, type: "invalid_request_error", code: "AGY_TOOL_FAILURE_LIMIT" } });
             return;
           }
           if (safety.reason) {
             if (opened) sseError(res, safety.reason.message, safety.reason.code);
-            else json(res, 409, { error: { message: safety.reason.message, type: "task_budget", code: safety.reason.code } });
+            else json(res, 400, { error: { message: safety.reason.message, type: "invalid_request_error", code: safety.reason.code } });
             return;
           }
 
@@ -975,7 +957,7 @@ export async function startProvider(options: ProviderServerOptions = {}): Promis
         let rawReply: string;
         try {
           const tierForRun = MODEL_TO_TIER[model ?? ""] ?? model ?? "";
-          rawReply = await run!(tierForRun, buildPrompt(messages, argonPrintFallback ? [] : tools));
+          rawReply = await run!(tierForRun, buildPrompt(messages, tools));
         } catch (err: any) {
           json(res, 502, {
             error: {

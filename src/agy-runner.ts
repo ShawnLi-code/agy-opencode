@@ -571,6 +571,44 @@ async function readCapped(
   return { text: new TextDecoder().decode(merged), dropped };
 }
 
+/** Read the final response from agy's line-delimited stream-json print mode. */
+async function readStreamResult(stream: ReadableStream<Uint8Array>): Promise<{ text: string; dropped: number; found: boolean; status?: string }> {
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  const maxLine = 2_000_000;
+  let buffer = "";
+  let discarding = false;
+  let response: string | undefined;
+  let status: string | undefined;
+  const consume = (line: string) => {
+    try {
+      const event = JSON.parse(line);
+      if (event?.event === "result" && event.result && typeof event.result === "object") {
+        status = typeof event.result.status === "string" ? event.result.status : undefined;
+        response = typeof event.result.response === "string" ? event.result.response : "";
+      }
+    } catch { /* non-JSON diagnostics are not result events */ }
+  };
+  for (;;) {
+    const { done, value } = await reader.read();
+    const text = done ? decoder.decode() : decoder.decode(value, { stream: true });
+    for (const char of text) {
+      if (char === "\n") {
+        if (!discarding && buffer) consume(buffer);
+        buffer = "";
+        discarding = false;
+      } else if (!discarding) {
+        buffer += char;
+        if (buffer.length > maxLine) { buffer = ""; discarding = true; }
+      }
+    }
+    if (done) break;
+  }
+  if (!discarding && buffer) consume(buffer);
+  const bytes = new TextEncoder().encode(response ?? "");
+  return { text: new TextDecoder().decode(bytes.subarray(0, MAX_STDOUT_BYTES)), dropped: Math.max(0, bytes.length - MAX_STDOUT_BYTES), found: response !== undefined, status };
+}
+
 /**
  * Cap a captured string for display, appending an explicit truncation
  * marker when anything was cut, so downstream classification-vs-surfacing
@@ -588,7 +626,13 @@ export async function runAgy(
   spawnFn: SpawnFn = spawn
 ): Promise<AgyResult> {
   const prepared = prepareAgy(opts);
-  const args = prepared.args;
+  // Windows CreateProcess has a 32,767 UTF-16 command-line limit. Account for
+  // worst-case quoting and keep large prompts off argv entirely. Short calls
+  // retain the traditional print mode and its existing semantics.
+  const streamInput = process.platform === "win32" && prepared.args.reduce((n, arg) => n + arg.length * 2 + 3, 0) > 30_000;
+  const args = streamInput
+    ? [...prepared.args.slice(0, -2), "--input-format", "stream-json", "--output-format", "stream-json"]
+    : prepared.args;
   const start = Date.now();
   const requestedConvId = opts.conversation;
 
@@ -647,12 +691,24 @@ export async function runAgy(
     }, parseTimeoutMs(prepared.timeout) + 1_000);
     hostTimer.unref?.();
 
-    proc.stdin.end();
+    // Bun's FileSink.end() takes an optional Error, not input bytes. Write the
+    // message first, then close; drain stdout/stderr concurrently so neither
+    // pipe can block the other for a large prompt.
+    const inputFinished = (async () => {
+      try {
+        if (streamInput) await proc.stdin.write(JSON.stringify({ event: "user", message: { role: "user", content: opts.prompt } }) + "\n");
+        await proc.stdin.end();
+      } catch (err) {
+        terminateChild(proc);
+        throw err;
+      }
+    })();
 
     const [out, err, exit] = await Promise.all([
-      readCapped(proc.stdout, MAX_STDOUT_BYTES),
+      streamInput ? readStreamResult(proc.stdout) : readCapped(proc.stdout, MAX_STDOUT_BYTES),
       readCapped(proc.stderr, MAX_STDERR_CAPTURE_BYTES),
       proc.exited,
+      inputFinished,
     ]);
 
     const durationMs = Date.now() - start;
@@ -722,6 +778,12 @@ export async function runAgy(
           ...convIdField(convId),
         }
       );
+    }
+
+    if (streamInput && (!("found" in out) || !out.found || (out.status && out.status !== "SUCCESS"))) {
+      throw new AgyError("agy stream-json did not return a successful result", "AGY_FAILED", {
+        ...timeoutField, durationMs, ...convIdField(convId),
+      });
     }
 
     if (!stdoutText.trim()) {

@@ -60,13 +60,16 @@ check(
 
 // ---- real HTTP path ------------------------------------------------------
 const seen = [];
+let releasePending;
+const pendingResult = new Promise((resolve) => { releasePending = resolve; });
 const bridge = new McpBridge({
   listTools: () => [{ name: "websearch", description: "Search", inputSchema: schema }],
   callTool: async (request) => {
     seen.push(request.arguments);
+    if (request.arguments.query === "pending") await pendingResult;
     return { content: [{ type: "text", text: `searched: ${request.arguments.query}` }] };
   },
-});
+}, { keepAliveMs: 60_000 });
 await bridge.start(0);
 const tenant = bridge.createTenant();
 
@@ -93,6 +96,27 @@ try {
   const objectString = await callTool('{"query":"json string"}');
   check("http: JSON string is parsed", seen[1]?.query === "json string", JSON.stringify(seen[1]));
   check("http: second call succeeds", objectString.status === 200 && objectString.text.includes("searched:"), objectString.text.slice(0, 120));
+
+  const notification = await fetch(tenant.url, {
+    method: "POST", headers: { "content-type": "application/json", authorization: tenant.header.value },
+    body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/roots/list_changed" }),
+  });
+  check("http: unknown notifications receive 202 and no JSON-RPC reply", notification.status === 202 && (await notification.text()) === "");
+
+  let pendingResponse;
+  try {
+    pendingResponse = await fetch(tenant.url, {
+      method: "POST", headers: { "content-type": "application/json", authorization: tenant.header.value },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 42, method: "tools/call", params: { name: "websearch", arguments: { query: "pending" } } }),
+      signal: AbortSignal.timeout(1500),
+    });
+    check("http: pending tool sends SSE headers immediately", pendingResponse.status === 200 && pendingResponse.headers.get("content-type")?.includes("text/event-stream"));
+  } catch (err) {
+    check("http: pending tool sends SSE headers immediately", false, String(err));
+  } finally {
+    releasePending();
+  }
+  if (pendingResponse) check("http: pending tool result follows headers", (await pendingResponse.text()).includes("searched: pending"));
 } finally {
   await bridge.close();
 }

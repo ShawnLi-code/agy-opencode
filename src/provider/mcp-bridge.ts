@@ -270,6 +270,10 @@ export class McpBridge {
     const method = typeof msg?.method === "string" ? msg.method : "";
     const params = msg?.params ?? {};
 
+    // Notifications never carry an id and must not receive JSON-RPC replies.
+    // In particular agy sends notifications/roots/list_changed during preload.
+    if (msg?.id === undefined && method) return undefined;
+
     // agy probes `server/discover` before `initialize` (protocol 2026-07-28+).
     // Answering it with the same capability block keeps the handshake to one
     // round trip; replying -32601 costs one more and blew the 5s preload budget.
@@ -346,6 +350,9 @@ export class McpBridge {
       "x-accel-buffering": "no",
       "mcp-protocol-version": MCP_PROTOCOL_VERSION,
     });
+    // writeHead alone buffers the headers until the first body write. A parked
+    // OpenCode tool may take minutes, so flush before awaiting its result.
+    res.flushHeaders();
 
     const controller = new AbortController();
     res.on("close", () => controller.abort());

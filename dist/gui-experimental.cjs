@@ -87,6 +87,8 @@ const StateSchema = Effect__namespace.Schema.Struct({
   autoApproveNative: Effect__namespace.Schema.Boolean,
   acpIdleMinutes: Effect__namespace.Schema.Number,
   acpMaxSessions: Effect__namespace.Schema.Number,
+  /** Context window advertised to opencode; 256K official, 983,040 with the binary patch. */
+  contextWindow: Effect__namespace.Schema.Number,
   nextAccountId: Effect__namespace.Schema.String,
   accounts: Effect__namespace.Schema.Array(AccountSchema)
 });
@@ -123,6 +125,11 @@ const AgyAccounts = gui$1.Ipc.define({
       }),
       output: Effect__namespace.Schema.Boolean
     },
+    /** Context window advertised to opencode (256K official / 983,040 patched). */
+    setContextWindow: {
+      input: Effect__namespace.Schema.Struct({ tokens: Effect__namespace.Schema.Number }),
+      output: Effect__namespace.Schema.Boolean
+    },
     /** Clear a cooldown so the account is used again immediately. */
     clearCooldown: { input: Effect__namespace.Schema.Struct({ id: Effect__namespace.Schema.String }), output: Effect__namespace.Schema.Boolean },
     /** Reset the local usage counters for an account. */
@@ -149,7 +156,7 @@ const AgyAccounts = gui$1.Ipc.define({
     loginCancel: { input: Effect__namespace.Schema.Struct({ id: Effect__namespace.Schema.String }), output: Effect__namespace.Schema.Boolean }
   }
 });
-var _tmpl$ = /* @__PURE__ */ web.template(`<span style="font-size:11px;line-height:18px;padding:0 7px;border-radius:5px">`), _tmpl$2 = /* @__PURE__ */ web.template(`<div style=margin-bottom:14px;font-size:12px>读取失败：`), _tmpl$3 = /* @__PURE__ */ web.template(`<div role=status style=margin-bottom:14px;font-size:12px>`), _tmpl$4 = /* @__PURE__ */ web.template(`<div style="padding:22px 26px 40px;font-size:13px;max-width:900px"><div style=margin-bottom:22px><h1 style="font-size:16px;font-weight:600;margin:0 0 6px">Antigravity</h1><p style=margin:0;line-height:1.55;font-size:12.5px>把 Antigravity 接成 OpenCode 的模型供应商：在模型里选 <code>agy-cli</code> 就能直接当主模型用， 也可以用 <code>agy</code> 工具把任务交给它跑。每个账号用独立 HOME 目录隔离凭证，互不影响。`), _tmpl$5 = /* @__PURE__ */ web.template(`<div style=margin-top:26px>工具执行方式`), _tmpl$6 = /* @__PURE__ */ web.template(`<div style=padding:14px><div style=display:flex;gap:8px;flex-wrap:wrap></div><p style="font-size:12px;line-height:1.6;margin:10px 0 0">`), _tmpl$7 = /* @__PURE__ */ web.template(`<div style=margin-top:26px>账号`), _tmpl$8 = /* @__PURE__ */ web.template(`<div style=font-size:12px;margin-bottom:8px>下次路由：<!>（实际请求时重新选择）`), _tmpl$9 = /* @__PURE__ */ web.template(`<div>`), _tmpl$0 = /* @__PURE__ */ web.template(`<div style=display:flex;gap:8px;margin-top:10px><input placeholder="新账号备注，例如「备用 Google 账号」"style="flex:1;font-size:12px;padding:6px 10px;border-radius:6px;outline:none"><button>添加账号`), _tmpl$1 = /* @__PURE__ */ web.template(`<div style=font-size:11.5px;margin-top:8px;line-height:1.6>`), _tmpl$10 = /* @__PURE__ */ web.template(`<div style=margin-top:12px;overflow:hidden><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px"><div><div style=font-size:12.5px>登录「<!>」</div><div style=font-size:11px;margin-top:2px>不会自动弹浏览器：请在你已经登录 Google 的浏览器里打开下面的链接</div></div><button>取消</button></div><div style="padding:12px 14px"><div style=display:flex;gap:8px><input readonly style="flex:1;min-width:0;padding:6px 9px;border-radius:6px;outline:none"><button></button></div><div style=font-size:11.5px;line-height:1.7;margin-top:10px>1. 打开链接，完成 Google 授权。<br>2. 把浏览器地址栏里的<b>完整地址</b>，或页面显示的<b>授权码</b>，粘到下面。</div><div style=display:flex;gap:8px;margin-top:8px><input placeholder=粘贴授权码或回调页面地址 style="flex:1;min-width:0;font-size:12px;padding:6px 10px;border-radius:6px;outline:none"><button></button></div><div style=font-size:10.5px;margin-top:10px;line-height:1.6>额外账号把 token 存在自己的 HOME 里（不走系统钥匙串），不会覆盖系统账号的登录。`), _tmpl$11 = /* @__PURE__ */ web.template(`<div style=margin-top:26px>调用设置`), _tmpl$12 = /* @__PURE__ */ web.template(`<div style="position:absolute;top:calc(100% + 6px);left:0;z-index:50;min-width:260px;max-height:320px;overflow-y:auto;background:var(--v2-background-bg-base, #16191f);border-radius:8px;box-shadow:0 12px 32px rgba(0,0,0,0.5);padding:6px">`), _tmpl$13 = /* @__PURE__ */ web.template(`<div><div style=border-top:none><div><div style=font-size:12.5px>默认档位</div><div style=font-size:11px;margin-top:2px>未指定 tier 时使用</div></div><div style=position:relative;justify-self:start><button style="min-width:250px;display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--v2-background-bg-base, #16191f);font-weight:500;opacity:1"><span></span><span style=font-size:10px></span></button></div></div><div><div><div style=font-size:12.5px>路由策略</div><div style=font-size:11px;margin-top:2px></div></div><div style=display:flex;gap:4px;justify-self:start></div></div><div><div><div style=font-size:12.5px>冷却时长</div><div style=font-size:11px;margin-top:2px>配额或未授权时暂停该账号</div></div><div style=display:flex;align-items:center;gap:8px;justify-self:start><input type=number min=1 max=240 style="width:64px;font-size:12px;padding:5px 8px;border-radius:6px;outline:none"><span style=font-size:11.5px>分钟</span></div></div><div><div><div style=font-size:12.5px>空闲回收</div><div style=font-size:11px;margin-top:2px>超时后关闭 worker，回来时自动恢复上下文</div></div><div style=display:flex;align-items:center;gap:8px;justify-self:start><input type=number min=1 max=1440 style="width:64px;font-size:12px;padding:5px 8px;border-radius:6px;outline:none"><span style=font-size:11.5px>分钟</span></div></div><div><div><div style=font-size:12.5px>进程上限</div><div style=font-size:11px;margin-top:2px>同时保留的 agy worker 数量</div></div><div style=display:flex;align-items:center;gap:8px;justify-self:start><input type=number min=1 max=16 style="width:64px;font-size:12px;padding:5px 8px;border-radius:6px;outline:none"><span style=font-size:11.5px>个`), _tmpl$14 = /* @__PURE__ */ web.template(`<div style=margin-top:26px;display:flex;align-items:center;justify-content:space-between><span>额度<span style=margin-left:8px;font-size:11px>来自 <code>agy --print=/usage</code></span></span><button>`), _tmpl$15 = /* @__PURE__ */ web.template(`<div style="padding:10px 14px;font-size:11px;line-height:1.55">上次读取失败：<span> · 5 分钟内不会自动重试，可以点「刷新」手动重试。`), _tmpl$16 = /* @__PURE__ */ web.template(`<button>`), _tmpl$17 = /* @__PURE__ */ web.template(`<span style=font-size:10.5px;flex-shrink:0>默认`), _tmpl$18 = /* @__PURE__ */ web.template(`<span style=font-size:11px;flex-shrink:0>冷却剩 <!> 分`), _tmpl$19 = /* @__PURE__ */ web.template(`<span>`), _tmpl$20 = /* @__PURE__ */ web.template(`<span> · 探测 `), _tmpl$21 = /* @__PURE__ */ web.template(`<span> · 上次 `), _tmpl$22 = /* @__PURE__ */ web.template(`<button>解除`), _tmpl$23 = /* @__PURE__ */ web.template(`<button>设为默认`), _tmpl$24 = /* @__PURE__ */ web.template(`<div style="display:flex;align-items:flex-start;gap:14px;padding:12px 14px"><div style=min-width:0;flex:1><div style=display:flex;align-items:baseline;gap:8px;min-width:0><span style=width:6px;height:6px;border-radius:50%;flex-shrink:0;transform:translateY(-2px)></span><span style=font-weight:500;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis></span></div><div style=margin-top:4px;display:flex;gap:7px;align-items:center;flex-wrap:wrap><span style=font-size:10px></span></div><div style=display:flex;gap:5px;margin-top:8px;flex-wrap:wrap></div><div style=margin-top:8px;font-size:11.5px;line-height:1.5>调用 <!> · 失败 <!> · 最近 </div></div><div style=display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;max-width:210px><button></button><button></button><button>删除`), _tmpl$25 = /* @__PURE__ */ web.template(`<span style=font-size:11px>`), _tmpl$26 = /* @__PURE__ */ web.template(`<div style="padding:7px 8px 3px;font-size:10.5px;letter-spacing:0.03em">`), _tmpl$27 = /* @__PURE__ */ web.template(`<span>✓`), _tmpl$28 = /* @__PURE__ */ web.template(`<div style="display:flex;justify-content:space-between;padding:5px 8px;border-radius:5px;cursor:pointer;font-size:12px"><span>`), _tmpl$29 = /* @__PURE__ */ web.template(`<div style=padding:14px;font-size:11.5px;line-height:1.6>`), _tmpl$30 = /* @__PURE__ */ web.template(`<div style="display:grid;grid-template-columns:minmax(180px, 260px) 1fr;align-items:center;gap:16px;padding:10px 14px"><div><div style=font-size:12.5px></div><div style=font-size:11px;margin-top:2px> · </div></div><div style=display:flex;align-items:center;gap:10px><div style=flex:1;height:6px;border-radius:3px;overflow:hidden><div style=height:100%></div></div><span style=width:40px;text-align:right;font-size:12px>%`);
+var _tmpl$ = /* @__PURE__ */ web.template(`<span style="font-size:11px;line-height:18px;padding:0 7px;border-radius:5px">`), _tmpl$2 = /* @__PURE__ */ web.template(`<div style=margin-bottom:14px;font-size:12px>读取失败：`), _tmpl$3 = /* @__PURE__ */ web.template(`<div role=status style=margin-bottom:14px;font-size:12px>`), _tmpl$4 = /* @__PURE__ */ web.template(`<div style="padding:22px 26px 40px;font-size:13px;max-width:900px"><div style=margin-bottom:22px><h1 style="font-size:16px;font-weight:600;margin:0 0 6px">Antigravity</h1><p style=margin:0;line-height:1.55;font-size:12.5px>把 Antigravity 接成 OpenCode 的模型供应商：在模型里选 <code>agy-cli</code> 就能直接当主模型用， 也可以用 <code>agy</code> 工具把任务交给它跑。每个账号用独立 HOME 目录隔离凭证，互不影响。`), _tmpl$5 = /* @__PURE__ */ web.template(`<div style=margin-top:26px>工具执行方式`), _tmpl$6 = /* @__PURE__ */ web.template(`<div style=padding:14px><div style=display:flex;gap:8px;flex-wrap:wrap></div><p style="font-size:12px;line-height:1.6;margin:10px 0 0">`), _tmpl$7 = /* @__PURE__ */ web.template(`<div style=margin-top:26px>账号`), _tmpl$8 = /* @__PURE__ */ web.template(`<div style=font-size:12px;margin-bottom:8px>下次路由：<!>（实际请求时重新选择）`), _tmpl$9 = /* @__PURE__ */ web.template(`<div>`), _tmpl$0 = /* @__PURE__ */ web.template(`<div style=display:flex;gap:8px;margin-top:10px><input placeholder="新账号备注，例如「备用 Google 账号」"style="flex:1;font-size:12px;padding:6px 10px;border-radius:6px;outline:none"><button>添加账号`), _tmpl$1 = /* @__PURE__ */ web.template(`<div style=font-size:11.5px;margin-top:8px;line-height:1.6>`), _tmpl$10 = /* @__PURE__ */ web.template(`<div style=margin-top:12px;overflow:hidden><div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px"><div><div style=font-size:12.5px>登录「<!>」</div><div style=font-size:11px;margin-top:2px>不会自动弹浏览器：请在你已经登录 Google 的浏览器里打开下面的链接</div></div><button>取消</button></div><div style="padding:12px 14px"><div style=display:flex;gap:8px><input readonly style="flex:1;min-width:0;padding:6px 9px;border-radius:6px;outline:none"><button></button></div><div style=font-size:11.5px;line-height:1.7;margin-top:10px>1. 打开链接，完成 Google 授权。<br>2. 把浏览器地址栏里的<b>完整地址</b>，或页面显示的<b>授权码</b>，粘到下面。</div><div style=display:flex;gap:8px;margin-top:8px><input placeholder=粘贴授权码或回调页面地址 style="flex:1;min-width:0;font-size:12px;padding:6px 10px;border-radius:6px;outline:none"><button></button></div><div style=font-size:10.5px;margin-top:10px;line-height:1.6>额外账号把 token 存在自己的 HOME 里（不走系统钥匙串），不会覆盖系统账号的登录。`), _tmpl$11 = /* @__PURE__ */ web.template(`<div style=margin-top:26px>调用设置`), _tmpl$12 = /* @__PURE__ */ web.template(`<div style="position:absolute;top:calc(100% + 6px);left:0;z-index:50;min-width:260px;max-height:320px;overflow-y:auto;background:var(--v2-background-bg-base, #16191f);border-radius:8px;box-shadow:0 12px 32px rgba(0,0,0,0.5);padding:6px">`), _tmpl$13 = /* @__PURE__ */ web.template(`<div><div style=border-top:none><div><div style=font-size:12.5px>默认档位</div><div style=font-size:11px;margin-top:2px>未指定 tier 时使用</div></div><div style=position:relative;justify-self:start><button style="min-width:250px;display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--v2-background-bg-base, #16191f);font-weight:500;opacity:1"><span></span><span style=font-size:10px></span></button></div></div><div><div><div style=font-size:12.5px>路由策略</div><div style=font-size:11px;margin-top:2px></div></div><div style=display:flex;gap:4px;justify-self:start></div></div><div><div><div style=font-size:12.5px>冷却时长</div><div style=font-size:11px;margin-top:2px>配额或未授权时暂停该账号</div></div><div style=display:flex;align-items:center;gap:8px;justify-self:start><input type=number min=1 max=240 style="width:64px;font-size:12px;padding:5px 8px;border-radius:6px;outline:none"><span style=font-size:11.5px>分钟</span></div></div><div><div><div style=font-size:12.5px>上下文窗口</div><div style=font-size:11px;margin-top:2px>1M 需要先给 agy 打补丁；官方二进制只支持 256K</div></div><div style=display:flex;align-items:center;gap:8px;justify-self:start><select style="font-size:12px;padding:5px 8px;border-radius:6px;outline:none"><option value=256000>256K（官方）</option><option value=983040>1M（已打补丁）</option></select></div></div><div><div><div style=font-size:12.5px>空闲回收</div><div style=font-size:11px;margin-top:2px>超时后关闭 worker，回来时自动恢复上下文</div></div><div style=display:flex;align-items:center;gap:8px;justify-self:start><input type=number min=1 max=1440 style="width:64px;font-size:12px;padding:5px 8px;border-radius:6px;outline:none"><span style=font-size:11.5px>分钟</span></div></div><div><div><div style=font-size:12.5px>进程上限</div><div style=font-size:11px;margin-top:2px>同时保留的 agy worker 数量</div></div><div style=display:flex;align-items:center;gap:8px;justify-self:start><input type=number min=1 max=16 style="width:64px;font-size:12px;padding:5px 8px;border-radius:6px;outline:none"><span style=font-size:11.5px>个`), _tmpl$14 = /* @__PURE__ */ web.template(`<div style=margin-top:26px;display:flex;align-items:center;justify-content:space-between><span>额度<span style=margin-left:8px;font-size:11px>来自 <code>agy --print=/usage</code></span></span><button>`), _tmpl$15 = /* @__PURE__ */ web.template(`<div style="padding:10px 14px;font-size:11px;line-height:1.55">上次读取失败：<span> · 5 分钟内不会自动重试，可以点「刷新」手动重试。`), _tmpl$16 = /* @__PURE__ */ web.template(`<button>`), _tmpl$17 = /* @__PURE__ */ web.template(`<span style=font-size:10.5px;flex-shrink:0>默认`), _tmpl$18 = /* @__PURE__ */ web.template(`<span style=font-size:11px;flex-shrink:0>冷却剩 <!> 分`), _tmpl$19 = /* @__PURE__ */ web.template(`<span>`), _tmpl$20 = /* @__PURE__ */ web.template(`<span> · 探测 `), _tmpl$21 = /* @__PURE__ */ web.template(`<span> · 上次 `), _tmpl$22 = /* @__PURE__ */ web.template(`<button>解除`), _tmpl$23 = /* @__PURE__ */ web.template(`<button>设为默认`), _tmpl$24 = /* @__PURE__ */ web.template(`<div style="display:flex;align-items:flex-start;gap:14px;padding:12px 14px"><div style=min-width:0;flex:1><div style=display:flex;align-items:baseline;gap:8px;min-width:0><span style=width:6px;height:6px;border-radius:50%;flex-shrink:0;transform:translateY(-2px)></span><span style=font-weight:500;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis></span></div><div style=margin-top:4px;display:flex;gap:7px;align-items:center;flex-wrap:wrap><span style=font-size:10px></span></div><div style=display:flex;gap:5px;margin-top:8px;flex-wrap:wrap></div><div style=margin-top:8px;font-size:11.5px;line-height:1.5>调用 <!> · 失败 <!> · 最近 </div></div><div style=display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;max-width:210px><button></button><button></button><button>删除`), _tmpl$25 = /* @__PURE__ */ web.template(`<span style=font-size:11px>`), _tmpl$26 = /* @__PURE__ */ web.template(`<div style="padding:7px 8px 3px;font-size:10.5px;letter-spacing:0.03em">`), _tmpl$27 = /* @__PURE__ */ web.template(`<span>✓`), _tmpl$28 = /* @__PURE__ */ web.template(`<div style="display:flex;justify-content:space-between;padding:5px 8px;border-radius:5px;cursor:pointer;font-size:12px"><span>`), _tmpl$29 = /* @__PURE__ */ web.template(`<div style=padding:14px;font-size:11.5px;line-height:1.6>`), _tmpl$30 = /* @__PURE__ */ web.template(`<div style="display:grid;grid-template-columns:minmax(180px, 260px) 1fr;align-items:center;gap:16px;padding:10px 14px"><div><div style=font-size:12.5px></div><div style=font-size:11px;margin-top:2px> · </div></div><div style=display:flex;align-items:center;gap:10px><div style=flex:1;height:6px;border-radius:3px;overflow:hidden><div style=height:100%></div></div><span style=width:40px;text-align:right;font-size:12px>%`);
 const T = {
   base: "var(--v2-text-text-base, #e6e9ef)",
   muted: "var(--v2-text-text-muted, #93a0b6)",
@@ -503,24 +510,24 @@ const gui = gui$1.Plugin.define({
               web.insert(_el$14, web.createComponent(solidJs.For, {
                 each: [["bridged", "OpenCode 工具"], ["native", "agy 原生工具"]],
                 children: ([mode, title]) => (() => {
-                  var _el$92 = _tmpl$16();
-                  _el$92.$$click = () => run("mode", () => client.setAgentMode({
+                  var _el$98 = _tmpl$16();
+                  _el$98.$$click = () => run("mode", () => client.setAgentMode({
                     mode
                   }), "执行方式已保存，新请求生效");
-                  web.insert(_el$92, title);
+                  web.insert(_el$98, title);
                   web.effect((_p$) => {
-                    var _v$64 = {
+                    var _v$69 = {
                       ...btnStyle(),
                       "border-color": data().agentMode === mode ? T.accent : T.border
-                    }, _v$65 = busy() === "mode";
-                    _p$.e = web.style(_el$92, _v$64, _p$.e);
-                    _v$65 !== _p$.t && (_el$92.disabled = _p$.t = _v$65);
+                    }, _v$70 = busy() === "mode";
+                    _p$.e = web.style(_el$98, _v$69, _p$.e);
+                    _v$70 !== _p$.t && (_el$98.disabled = _p$.t = _v$70);
                     return _p$;
                   }, {
                     e: void 0,
                     t: void 0
                   });
-                  return _el$92;
+                  return _el$98;
                 })()
               }));
               web.insert(_el$15, (() => {
@@ -565,138 +572,138 @@ const gui = gui$1.Plugin.define({
                   const cooling = left > 0;
                   const isActive = acc.id === data().activeAccountId;
                   return (() => {
-                    var _el$93 = _tmpl$24(), _el$94 = _el$93.firstChild, _el$95 = _el$94.firstChild, _el$96 = _el$95.firstChild, _el$97 = _el$96.nextSibling, _el$103 = _el$95.nextSibling, _el$105 = _el$103.firstChild, _el$106 = _el$103.nextSibling, _el$107 = _el$106.nextSibling, _el$108 = _el$107.firstChild, _el$115 = _el$108.nextSibling, _el$109 = _el$115.nextSibling, _el$116 = _el$109.nextSibling;
-                    _el$116.nextSibling;
-                    var _el$117 = _el$94.nextSibling, _el$118 = _el$117.firstChild, _el$119 = _el$118.nextSibling, _el$122 = _el$119.nextSibling;
-                    web.insert(_el$97, () => acc.alias);
-                    web.insert(_el$95, web.createComponent(solidJs.Show, {
+                    var _el$99 = _tmpl$24(), _el$100 = _el$99.firstChild, _el$101 = _el$100.firstChild, _el$102 = _el$101.firstChild, _el$103 = _el$102.nextSibling, _el$109 = _el$101.nextSibling, _el$111 = _el$109.firstChild, _el$112 = _el$109.nextSibling, _el$113 = _el$112.nextSibling, _el$114 = _el$113.firstChild, _el$121 = _el$114.nextSibling, _el$115 = _el$121.nextSibling, _el$122 = _el$115.nextSibling;
+                    _el$122.nextSibling;
+                    var _el$123 = _el$100.nextSibling, _el$124 = _el$123.firstChild, _el$125 = _el$124.nextSibling, _el$128 = _el$125.nextSibling;
+                    web.insert(_el$103, () => acc.alias);
+                    web.insert(_el$101, web.createComponent(solidJs.Show, {
                       when: isActive,
                       get children() {
-                        var _el$98 = _tmpl$17();
-                        web.effect((_$p) => web.setStyleProperty(_el$98, "color", T.accent));
-                        return _el$98;
+                        var _el$104 = _tmpl$17();
+                        web.effect((_$p) => web.setStyleProperty(_el$104, "color", T.accent));
+                        return _el$104;
                       }
                     }), null);
-                    web.insert(_el$95, web.createComponent(solidJs.Show, {
+                    web.insert(_el$101, web.createComponent(solidJs.Show, {
                       when: cooling,
                       get children() {
-                        var _el$99 = _tmpl$18(), _el$100 = _el$99.firstChild, _el$102 = _el$100.nextSibling;
-                        _el$102.nextSibling;
-                        web.insert(_el$99, left, _el$102);
-                        web.effect((_$p) => web.setStyleProperty(_el$99, "color", T.yellow));
-                        return _el$99;
+                        var _el$105 = _tmpl$18(), _el$106 = _el$105.firstChild, _el$108 = _el$106.nextSibling;
+                        _el$108.nextSibling;
+                        web.insert(_el$105, left, _el$108);
+                        web.effect((_$p) => web.setStyleProperty(_el$105, "color", T.yellow));
+                        return _el$105;
                       }
                     }), null);
-                    web.insert(_el$103, web.createComponent(solidJs.Show, {
+                    web.insert(_el$109, web.createComponent(solidJs.Show, {
                       get when() {
                         return acc.email;
                       },
                       get fallback() {
                         return (() => {
-                          var _el$123 = _tmpl$25();
-                          web.insert(_el$123, () => acc.id === "system" ? "未读取到登录账号" : "未登录 · 点「登录」授权");
-                          web.effect((_$p) => web.setStyleProperty(_el$123, "color", T.faint));
-                          return _el$123;
+                          var _el$129 = _tmpl$25();
+                          web.insert(_el$129, () => acc.id === "system" ? "未读取到登录账号" : "未登录 · 点「登录」授权");
+                          web.effect((_$p) => web.setStyleProperty(_el$129, "color", T.faint));
+                          return _el$129;
                         })();
                       },
                       get children() {
-                        var _el$104 = _tmpl$19();
-                        web.insert(_el$104, (() => {
+                        var _el$110 = _tmpl$19();
+                        web.insert(_el$110, (() => {
                           var _c$4 = web.memo(() => acc.alias === acc.email);
                           return () => _c$4() ? "" : acc.email;
                         })(), null);
-                        web.insert(_el$104, () => acc.id === "system" ? "（本地 token，系统钥匙串可能不同）" : "", null);
+                        web.insert(_el$110, () => acc.id === "system" ? "（本地 token，系统钥匙串可能不同）" : "", null);
                         web.effect((_p$) => {
-                          var _v$66 = T.muted, _v$67 = `11.5px ${T.mono}`;
-                          _v$66 !== _p$.e && web.setStyleProperty(_el$104, "color", _p$.e = _v$66);
-                          _v$67 !== _p$.t && web.setStyleProperty(_el$104, "font", _p$.t = _v$67);
+                          var _v$71 = T.muted, _v$72 = `11.5px ${T.mono}`;
+                          _v$71 !== _p$.e && web.setStyleProperty(_el$110, "color", _p$.e = _v$71);
+                          _v$72 !== _p$.t && web.setStyleProperty(_el$110, "font", _p$.t = _v$72);
                           return _p$;
                         }, {
                           e: void 0,
                           t: void 0
                         });
-                        return _el$104;
+                        return _el$110;
                       }
-                    }), _el$105);
-                    web.insert(_el$105, () => acc.id);
-                    web.insert(_el$106, () => chip(acc.argon, "Argon"), null);
-                    web.insert(_el$106, () => chip(acc.claude, "Claude"), null);
-                    web.insert(_el$106, () => chip(acc.flash, "Flash"), null);
-                    web.insert(_el$107, () => acc.calls ?? 0, _el$115);
-                    web.insert(_el$107, () => acc.failures ?? 0, _el$116);
-                    web.insert(_el$107, () => ago(acc.lastUsedAt, now()), null);
-                    web.insert(_el$107, web.createComponent(solidJs.Show, {
+                    }), _el$111);
+                    web.insert(_el$111, () => acc.id);
+                    web.insert(_el$112, () => chip(acc.argon, "Argon"), null);
+                    web.insert(_el$112, () => chip(acc.claude, "Claude"), null);
+                    web.insert(_el$112, () => chip(acc.flash, "Flash"), null);
+                    web.insert(_el$113, () => acc.calls ?? 0, _el$121);
+                    web.insert(_el$113, () => acc.failures ?? 0, _el$122);
+                    web.insert(_el$113, () => ago(acc.lastUsedAt, now()), null);
+                    web.insert(_el$113, web.createComponent(solidJs.Show, {
                       get when() {
                         return acc.checkedAt;
                       },
                       get children() {
-                        var _el$111 = _tmpl$20();
-                        _el$111.firstChild;
-                        web.insert(_el$111, () => ago(acc.checkedAt, now()), null);
-                        web.effect((_$p) => web.setStyleProperty(_el$111, "color", T.faint));
-                        return _el$111;
+                        var _el$117 = _tmpl$20();
+                        _el$117.firstChild;
+                        web.insert(_el$117, () => ago(acc.checkedAt, now()), null);
+                        web.effect((_$p) => web.setStyleProperty(_el$117, "color", T.faint));
+                        return _el$117;
                       }
                     }), null);
-                    web.insert(_el$107, web.createComponent(solidJs.Show, {
+                    web.insert(_el$113, web.createComponent(solidJs.Show, {
                       get when() {
                         return acc.lastError;
                       },
                       get children() {
-                        var _el$113 = _tmpl$21();
-                        _el$113.firstChild;
-                        web.insert(_el$113, () => acc.lastError, null);
-                        web.effect((_$p) => web.setStyleProperty(_el$113, "color", T.yellow));
-                        return _el$113;
+                        var _el$119 = _tmpl$21();
+                        _el$119.firstChild;
+                        web.insert(_el$119, () => acc.lastError, null);
+                        web.effect((_$p) => web.setStyleProperty(_el$119, "color", T.yellow));
+                        return _el$119;
                       }
                     }), null);
-                    _el$118.$$click = () => run(acc.id, () => client.probe({
+                    _el$124.$$click = () => run(acc.id, () => client.probe({
                       id: acc.id
                     }), "探测完成");
-                    web.insert(_el$118, () => busy() === acc.id ? "探测中" : "探测");
-                    _el$119.$$click = () => void startLogin(acc.id);
-                    web.insert(_el$119, () => busy() === `login-${acc.id}` ? "准备中" : "登录");
-                    web.insert(_el$117, web.createComponent(solidJs.Show, {
+                    web.insert(_el$124, () => busy() === acc.id ? "探测中" : "探测");
+                    _el$125.$$click = () => void startLogin(acc.id);
+                    web.insert(_el$125, () => busy() === `login-${acc.id}` ? "准备中" : "登录");
+                    web.insert(_el$123, web.createComponent(solidJs.Show, {
                       when: cooling,
                       get children() {
-                        var _el$120 = _tmpl$22();
-                        _el$120.$$click = () => run(`cd-${acc.id}`, () => client.clearCooldown({
+                        var _el$126 = _tmpl$22();
+                        _el$126.$$click = () => run(`cd-${acc.id}`, () => client.clearCooldown({
                           id: acc.id
                         }), "已解除冷却");
-                        web.effect((_$p) => web.style(_el$120, btnStyle(), _$p));
-                        return _el$120;
+                        web.effect((_$p) => web.style(_el$126, btnStyle(), _$p));
+                        return _el$126;
                       }
-                    }), _el$122);
-                    web.insert(_el$117, web.createComponent(solidJs.Show, {
+                    }), _el$128);
+                    web.insert(_el$123, web.createComponent(solidJs.Show, {
                       when: !isActive,
                       get children() {
-                        var _el$121 = _tmpl$23();
-                        _el$121.$$click = () => run(acc.id, () => client.setActive({
+                        var _el$127 = _tmpl$23();
+                        _el$127.$$click = () => run(acc.id, () => client.setActive({
                           id: acc.id
                         }), "已切换默认账号");
-                        web.effect((_$p) => web.style(_el$121, btnStyle(), _$p));
-                        return _el$121;
+                        web.effect((_$p) => web.style(_el$127, btnStyle(), _$p));
+                        return _el$127;
                       }
-                    }), _el$122);
-                    _el$122.$$click = () => {
+                    }), _el$128);
+                    _el$128.$$click = () => {
                       if (window.confirm(acc.id === "system" ? "移除系统账号入口？不会删除系统登录凭证。" : "移除此账号入口？不会删除登录凭证。")) void run(acc.id, () => client.remove({
                         id: acc.id
                       }), "账号入口已移除");
                     };
                     web.effect((_p$) => {
-                      var _v$68 = acc === data().accounts[0] ? "none" : `1px solid ${T.border}`, _v$69 = isActive ? T.layer2 : "transparent", _v$70 = cooling ? T.yellow : isActive ? T.green : T.faint, _v$71 = T.faint, _v$72 = acc.id, _v$73 = T.weak, _v$74 = btnStyle(), _v$75 = busy() === acc.id, _v$76 = btnStyle(), _v$77 = busy() === `login-${acc.id}`, _v$78 = btnStyle("danger"), _v$79 = data().accounts.length <= 1, _v$80 = acc.id === "system" ? "仅移除插件内的入口，不删除系统登录凭证" : "仅移除插件内的账号入口";
-                      _v$68 !== _p$.e && web.setStyleProperty(_el$93, "border-top", _p$.e = _v$68);
-                      _v$69 !== _p$.t && web.setStyleProperty(_el$93, "background", _p$.t = _v$69);
-                      _v$70 !== _p$.a && web.setStyleProperty(_el$96, "background", _p$.a = _v$70);
-                      _v$71 !== _p$.o && web.setStyleProperty(_el$105, "color", _p$.o = _v$71);
-                      _v$72 !== _p$.i && web.setAttribute(_el$105, "title", _p$.i = _v$72);
-                      _v$73 !== _p$.n && web.setStyleProperty(_el$107, "color", _p$.n = _v$73);
-                      _p$.s = web.style(_el$118, _v$74, _p$.s);
-                      _v$75 !== _p$.h && (_el$118.disabled = _p$.h = _v$75);
-                      _p$.r = web.style(_el$119, _v$76, _p$.r);
-                      _v$77 !== _p$.d && (_el$119.disabled = _p$.d = _v$77);
-                      _p$.l = web.style(_el$122, _v$78, _p$.l);
-                      _v$79 !== _p$.u && (_el$122.disabled = _p$.u = _v$79);
-                      _v$80 !== _p$.c && web.setAttribute(_el$122, "title", _p$.c = _v$80);
+                      var _v$73 = acc === data().accounts[0] ? "none" : `1px solid ${T.border}`, _v$74 = isActive ? T.layer2 : "transparent", _v$75 = cooling ? T.yellow : isActive ? T.green : T.faint, _v$76 = T.faint, _v$77 = acc.id, _v$78 = T.weak, _v$79 = btnStyle(), _v$80 = busy() === acc.id, _v$81 = btnStyle(), _v$82 = busy() === `login-${acc.id}`, _v$83 = btnStyle("danger"), _v$84 = data().accounts.length <= 1, _v$85 = acc.id === "system" ? "仅移除插件内的入口，不删除系统登录凭证" : "仅移除插件内的账号入口";
+                      _v$73 !== _p$.e && web.setStyleProperty(_el$99, "border-top", _p$.e = _v$73);
+                      _v$74 !== _p$.t && web.setStyleProperty(_el$99, "background", _p$.t = _v$74);
+                      _v$75 !== _p$.a && web.setStyleProperty(_el$102, "background", _p$.a = _v$75);
+                      _v$76 !== _p$.o && web.setStyleProperty(_el$111, "color", _p$.o = _v$76);
+                      _v$77 !== _p$.i && web.setAttribute(_el$111, "title", _p$.i = _v$77);
+                      _v$78 !== _p$.n && web.setStyleProperty(_el$113, "color", _p$.n = _v$78);
+                      _p$.s = web.style(_el$124, _v$79, _p$.s);
+                      _v$80 !== _p$.h && (_el$124.disabled = _p$.h = _v$80);
+                      _p$.r = web.style(_el$125, _v$81, _p$.r);
+                      _v$82 !== _p$.d && (_el$125.disabled = _p$.d = _v$82);
+                      _p$.l = web.style(_el$128, _v$83, _p$.l);
+                      _v$84 !== _p$.u && (_el$128.disabled = _p$.u = _v$84);
+                      _v$85 !== _p$.c && web.setAttribute(_el$128, "title", _p$.c = _v$85);
                       return _p$;
                     }, {
                       e: void 0,
@@ -713,7 +720,7 @@ const gui = gui$1.Plugin.define({
                       u: void 0,
                       c: void 0
                     });
-                    return _el$93;
+                    return _el$99;
                   })();
                 }
               }));
@@ -822,7 +829,7 @@ const gui = gui$1.Plugin.define({
               }, _$p));
               return _el$44;
             })(), (() => {
-              var _el$45 = _tmpl$13(), _el$46 = _el$45.firstChild, _el$47 = _el$46.firstChild, _el$48 = _el$47.firstChild, _el$49 = _el$48.nextSibling, _el$50 = _el$47.nextSibling, _el$51 = _el$50.firstChild, _el$52 = _el$51.firstChild, _el$53 = _el$52.nextSibling, _el$55 = _el$46.nextSibling, _el$56 = _el$55.firstChild, _el$57 = _el$56.firstChild, _el$58 = _el$57.nextSibling, _el$59 = _el$56.nextSibling, _el$60 = _el$55.nextSibling, _el$61 = _el$60.firstChild, _el$62 = _el$61.firstChild, _el$63 = _el$62.nextSibling, _el$64 = _el$61.nextSibling, _el$65 = _el$64.firstChild, _el$66 = _el$65.nextSibling, _el$67 = _el$60.nextSibling, _el$68 = _el$67.firstChild, _el$69 = _el$68.firstChild, _el$70 = _el$69.nextSibling, _el$71 = _el$68.nextSibling, _el$72 = _el$71.firstChild, _el$73 = _el$72.nextSibling, _el$74 = _el$67.nextSibling, _el$75 = _el$74.firstChild, _el$76 = _el$75.firstChild, _el$77 = _el$76.nextSibling, _el$78 = _el$75.nextSibling, _el$79 = _el$78.firstChild, _el$80 = _el$79.nextSibling;
+              var _el$45 = _tmpl$13(), _el$46 = _el$45.firstChild, _el$47 = _el$46.firstChild, _el$48 = _el$47.firstChild, _el$49 = _el$48.nextSibling, _el$50 = _el$47.nextSibling, _el$51 = _el$50.firstChild, _el$52 = _el$51.firstChild, _el$53 = _el$52.nextSibling, _el$55 = _el$46.nextSibling, _el$56 = _el$55.firstChild, _el$57 = _el$56.firstChild, _el$58 = _el$57.nextSibling, _el$59 = _el$56.nextSibling, _el$60 = _el$55.nextSibling, _el$61 = _el$60.firstChild, _el$62 = _el$61.firstChild, _el$63 = _el$62.nextSibling, _el$64 = _el$61.nextSibling, _el$65 = _el$64.firstChild, _el$66 = _el$65.nextSibling, _el$67 = _el$60.nextSibling, _el$68 = _el$67.firstChild, _el$69 = _el$68.firstChild, _el$70 = _el$69.nextSibling, _el$71 = _el$68.nextSibling, _el$72 = _el$71.firstChild, _el$73 = _el$67.nextSibling, _el$74 = _el$73.firstChild, _el$75 = _el$74.firstChild, _el$76 = _el$75.nextSibling, _el$77 = _el$74.nextSibling, _el$78 = _el$77.firstChild, _el$79 = _el$78.nextSibling, _el$80 = _el$73.nextSibling, _el$81 = _el$80.firstChild, _el$82 = _el$81.firstChild, _el$83 = _el$82.nextSibling, _el$84 = _el$81.nextSibling, _el$85 = _el$84.firstChild, _el$86 = _el$85.nextSibling;
               _el$51.$$click = () => setPicker((v) => !v);
               web.insert(_el$52, () => TIER_LABEL[tier()] ?? tier());
               web.insert(_el$53, () => picker() ? "▲" : "▼");
@@ -837,45 +844,45 @@ const gui = gui$1.Plugin.define({
                       return groups();
                     },
                     children: (g) => [(() => {
-                      var _el$124 = _tmpl$26();
-                      web.insert(_el$124, () => g.model);
-                      web.effect((_$p) => web.setStyleProperty(_el$124, "color", T.faint));
-                      return _el$124;
+                      var _el$130 = _tmpl$26();
+                      web.insert(_el$130, () => g.model);
+                      web.effect((_$p) => web.setStyleProperty(_el$130, "color", T.faint));
+                      return _el$130;
                     })(), web.createComponent(solidJs.For, {
                       get each() {
                         return g.tiers;
                       },
                       children: ([id, level]) => (() => {
-                        var _el$125 = _tmpl$28(), _el$126 = _el$125.firstChild;
-                        _el$125.$$click = () => {
+                        var _el$131 = _tmpl$28(), _el$132 = _el$131.firstChild;
+                        _el$131.$$click = () => {
                           setPicker(false);
                           setLocal("tier", id);
                           void run("tier", () => client.setDefaultTier({
                             tier: id
                           }), "默认档位已保存");
                         };
-                        web.setAttribute(_el$125, "data-tier", id);
-                        web.insert(_el$126, level);
-                        web.insert(_el$125, web.createComponent(solidJs.Show, {
+                        web.setAttribute(_el$131, "data-tier", id);
+                        web.insert(_el$132, level);
+                        web.insert(_el$131, web.createComponent(solidJs.Show, {
                           get when() {
                             return id === tier();
                           },
                           get children() {
-                            var _el$127 = _tmpl$27();
-                            web.effect((_$p) => web.setStyleProperty(_el$127, "color", T.accent));
-                            return _el$127;
+                            var _el$133 = _tmpl$27();
+                            web.effect((_$p) => web.setStyleProperty(_el$133, "color", T.accent));
+                            return _el$133;
                           }
                         }), null);
                         web.effect((_p$) => {
-                          var _v$81 = id === tier() ? T.layer2 : "transparent", _v$82 = id === tier() ? T.base : T.muted;
-                          _v$81 !== _p$.e && web.setStyleProperty(_el$125, "background", _p$.e = _v$81);
-                          _v$82 !== _p$.t && web.setStyleProperty(_el$125, "color", _p$.t = _v$82);
+                          var _v$86 = id === tier() ? T.layer2 : "transparent", _v$87 = id === tier() ? T.base : T.muted;
+                          _v$86 !== _p$.e && web.setStyleProperty(_el$131, "background", _p$.e = _v$86);
+                          _v$87 !== _p$.t && web.setStyleProperty(_el$131, "color", _p$.t = _v$87);
                           return _p$;
                         }, {
                           e: void 0,
                           t: void 0
                         });
-                        return _el$125;
+                        return _el$131;
                       })()
                     })]
                   }));
@@ -890,18 +897,18 @@ const gui = gui$1.Plugin.define({
               web.insert(_el$59, web.createComponent(solidJs.For, {
                 each: ROUTING,
                 children: ([value, text]) => (() => {
-                  var _el$128 = _tmpl$16();
-                  _el$128.$$click = () => run("routing", () => client.setRouting({
+                  var _el$134 = _tmpl$16();
+                  _el$134.$$click = () => run("routing", () => client.setRouting({
                     routing: value
                   }), "路由策略已保存");
-                  web.insert(_el$128, text);
-                  web.effect((_$p) => web.style(_el$128, {
+                  web.insert(_el$134, text);
+                  web.effect((_$p) => web.style(_el$134, {
                     ...btnStyle(),
                     "border-color": data().routing === value ? T.accent : T.border,
                     background: data().routing === value ? "color-mix(in srgb, var(--v2-blue-600, #3b5bdb) 18%, transparent)" : T.btn,
                     color: data().routing === value ? T.base : T.muted
                   }, _$p));
-                  return _el$128;
+                  return _el$134;
                 })()
               }));
               _el$65.addEventListener("change", (e) => {
@@ -912,6 +919,11 @@ const gui = gui$1.Plugin.define({
                 }), "已保存");
               });
               _el$72.addEventListener("change", (e) => {
+                void run("context-window", () => client.setContextWindow({
+                  tokens: Number(e.currentTarget.value)
+                }), "已保存，重载插件后生效");
+              });
+              _el$78.addEventListener("change", (e) => {
                 const minutes = Number(e.currentTarget.value);
                 if (!Number.isFinite(minutes) || minutes < 1) return;
                 void run("acp-idle", () => client.setAcpLimits({
@@ -919,7 +931,7 @@ const gui = gui$1.Plugin.define({
                   maxSessions: data().acpMaxSessions ?? 3
                 }), "已保存");
               });
-              _el$79.addEventListener("change", (e) => {
+              _el$85.addEventListener("change", (e) => {
                 const sessions = Number(e.currentTarget.value);
                 if (!Number.isFinite(sessions) || sessions < 1) return;
                 void run("acp-max", () => client.setAcpLimits({
@@ -934,7 +946,7 @@ const gui = gui$1.Plugin.define({
                   ...btnStyle(),
                   "border-color": T.borderStrong,
                   color: T.base
-                }, _v$35 = T.muted, _v$36 = row, _v$37 = T.faint, _v$38 = row, _v$39 = T.faint, _v$40 = `1px solid ${T.border}`, _v$41 = T.layer1, _v$42 = T.base, _v$43 = T.faint, _v$44 = row, _v$45 = T.faint, _v$46 = `1px solid ${T.border}`, _v$47 = T.layer1, _v$48 = T.base, _v$49 = T.faint, _v$50 = row, _v$51 = T.faint, _v$52 = `1px solid ${T.border}`, _v$53 = T.layer1, _v$54 = T.base, _v$55 = T.faint;
+                }, _v$35 = T.muted, _v$36 = row, _v$37 = T.faint, _v$38 = row, _v$39 = T.faint, _v$40 = `1px solid ${T.border}`, _v$41 = T.layer1, _v$42 = T.base, _v$43 = T.faint, _v$44 = row, _v$45 = T.faint, _v$46 = `1px solid ${T.border}`, _v$47 = T.layer1, _v$48 = T.base, _v$49 = row, _v$50 = T.faint, _v$51 = `1px solid ${T.border}`, _v$52 = T.layer1, _v$53 = T.base, _v$54 = T.faint, _v$55 = row, _v$56 = T.faint, _v$57 = `1px solid ${T.border}`, _v$58 = T.layer1, _v$59 = T.base, _v$60 = T.faint;
                 _p$.e = web.style(_el$45, _v$31, _p$.e);
                 _p$.t = web.style(_el$46, _v$32, _p$.t);
                 _v$33 !== _p$.a && web.setStyleProperty(_el$49, "color", _p$.a = _v$33);
@@ -953,13 +965,18 @@ const gui = gui$1.Plugin.define({
                 _v$46 !== _p$.f && web.setStyleProperty(_el$72, "border", _p$.f = _v$46);
                 _v$47 !== _p$.y && web.setStyleProperty(_el$72, "background", _p$.y = _v$47);
                 _v$48 !== _p$.g && web.setStyleProperty(_el$72, "color", _p$.g = _v$48);
-                _v$49 !== _p$.p && web.setStyleProperty(_el$73, "color", _p$.p = _v$49);
-                _p$.b = web.style(_el$74, _v$50, _p$.b);
-                _v$51 !== _p$.T && web.setStyleProperty(_el$77, "color", _p$.T = _v$51);
-                _v$52 !== _p$.A && web.setStyleProperty(_el$79, "border", _p$.A = _v$52);
-                _v$53 !== _p$.O && web.setStyleProperty(_el$79, "background", _p$.O = _v$53);
+                _p$.p = web.style(_el$73, _v$49, _p$.p);
+                _v$50 !== _p$.b && web.setStyleProperty(_el$76, "color", _p$.b = _v$50);
+                _v$51 !== _p$.T && web.setStyleProperty(_el$78, "border", _p$.T = _v$51);
+                _v$52 !== _p$.A && web.setStyleProperty(_el$78, "background", _p$.A = _v$52);
+                _v$53 !== _p$.O && web.setStyleProperty(_el$78, "color", _p$.O = _v$53);
                 _v$54 !== _p$.I && web.setStyleProperty(_el$79, "color", _p$.I = _v$54);
-                _v$55 !== _p$.S && web.setStyleProperty(_el$80, "color", _p$.S = _v$55);
+                _p$.S = web.style(_el$80, _v$55, _p$.S);
+                _v$56 !== _p$.W && web.setStyleProperty(_el$83, "color", _p$.W = _v$56);
+                _v$57 !== _p$.C && web.setStyleProperty(_el$85, "border", _p$.C = _v$57);
+                _v$58 !== _p$.B && web.setStyleProperty(_el$85, "background", _p$.B = _v$58);
+                _v$59 !== _p$.v && web.setStyleProperty(_el$85, "color", _p$.v = _v$59);
+                _v$60 !== _p$.k && web.setStyleProperty(_el$86, "color", _p$.k = _v$60);
                 return _p$;
               }, {
                 e: void 0,
@@ -986,37 +1003,43 @@ const gui = gui$1.Plugin.define({
                 A: void 0,
                 O: void 0,
                 I: void 0,
-                S: void 0
+                S: void 0,
+                W: void 0,
+                C: void 0,
+                B: void 0,
+                v: void 0,
+                k: void 0
               });
               web.effect(() => _el$65.value = Math.round((data().cooldownMs ?? 9e5) / 6e4));
-              web.effect(() => _el$72.value = data().acpIdleMinutes ?? 10);
-              web.effect(() => _el$79.value = data().acpMaxSessions ?? 3);
+              web.effect(() => _el$72.value = (data().contextWindow ?? 256e3) >= 9e5 ? "983040" : "256000");
+              web.effect(() => _el$78.value = data().acpIdleMinutes ?? 10);
+              web.effect(() => _el$85.value = data().acpMaxSessions ?? 3);
               return _el$45;
             })(), (() => {
-              var _el$81 = _tmpl$14(), _el$82 = _el$81.firstChild, _el$83 = _el$82.firstChild, _el$84 = _el$83.nextSibling, _el$85 = _el$84.firstChild, _el$86 = _el$85.nextSibling, _el$87 = _el$82.nextSibling;
-              web.insert(_el$84, (() => {
+              var _el$87 = _tmpl$14(), _el$88 = _el$87.firstChild, _el$89 = _el$88.firstChild, _el$90 = _el$89.nextSibling, _el$91 = _el$90.firstChild, _el$92 = _el$91.nextSibling, _el$93 = _el$88.nextSibling;
+              web.insert(_el$90, (() => {
                 var _c$2 = web.memo(() => {
                   var _a;
                   return !!((_a = activeAccount()) == null ? void 0 : _a.usageCheckedAt);
                 });
                 return () => _c$2() ? ` · ${ago(activeAccount().usageCheckedAt, now())}` : "";
               })(), null);
-              _el$87.$$click = () => run("usage", () => client.usage({
+              _el$93.$$click = () => run("usage", () => client.usage({
                 id: data().activeAccountId
               }), "额度已刷新");
-              web.insert(_el$87, (() => {
+              web.insert(_el$93, (() => {
                 var _c$3 = web.memo(() => busy() === "usage");
                 return () => _c$3() ? `读取中 ${elapsed()}s` : "刷新";
               })());
               web.effect((_p$) => {
-                var _v$56 = {
+                var _v$61 = {
                   ...label
-                }, _v$57 = T.faint, _v$58 = `11px ${T.mono}`, _v$59 = btnStyle(), _v$60 = busy() === "usage";
-                _p$.e = web.style(_el$81, _v$56, _p$.e);
-                _v$57 !== _p$.t && web.setStyleProperty(_el$84, "color", _p$.t = _v$57);
-                _v$58 !== _p$.a && web.setStyleProperty(_el$86, "font", _p$.a = _v$58);
-                _p$.o = web.style(_el$87, _v$59, _p$.o);
-                _v$60 !== _p$.i && (_el$87.disabled = _p$.i = _v$60);
+                }, _v$62 = T.faint, _v$63 = `11px ${T.mono}`, _v$64 = btnStyle(), _v$65 = busy() === "usage";
+                _p$.e = web.style(_el$87, _v$61, _p$.e);
+                _v$62 !== _p$.t && web.setStyleProperty(_el$90, "color", _p$.t = _v$62);
+                _v$63 !== _p$.a && web.setStyleProperty(_el$92, "font", _p$.a = _v$63);
+                _p$.o = web.style(_el$93, _v$64, _p$.o);
+                _v$65 !== _p$.i && (_el$93.disabled = _p$.i = _v$65);
                 return _p$;
               }, {
                 e: void 0,
@@ -1025,22 +1048,22 @@ const gui = gui$1.Plugin.define({
                 o: void 0,
                 i: void 0
               });
-              return _el$81;
+              return _el$87;
             })(), (() => {
-              var _el$88 = _tmpl$9();
-              web.insert(_el$88, web.createComponent(solidJs.Show, {
+              var _el$94 = _tmpl$9();
+              web.insert(_el$94, web.createComponent(solidJs.Show, {
                 get when() {
                   return activeUsage().length > 0;
                 },
                 get fallback() {
                   return (() => {
-                    var _el$129 = _tmpl$29();
-                    web.insert(_el$129, (() => {
+                    var _el$135 = _tmpl$29();
+                    web.insert(_el$135, (() => {
                       var _c$5 = web.memo(() => busy() === "usage");
                       return () => _c$5() ? `正在向官方 CLI 读取… 已等待 ${elapsed()} 秒（最长 30 秒，超时会自动停止）` : "暂无数据，点右上角「刷新」读取。官方 CLI 首次读取通常要 10–30 秒。";
                     })());
-                    web.effect((_$p) => web.setStyleProperty(_el$129, "color", T.muted));
-                    return _el$129;
+                    web.effect((_$p) => web.setStyleProperty(_el$135, "color", T.muted));
+                    return _el$135;
                   })();
                 },
                 get children() {
@@ -1049,20 +1072,20 @@ const gui = gui$1.Plugin.define({
                       return activeUsage();
                     },
                     children: (u, i) => (() => {
-                      var _el$130 = _tmpl$30(), _el$131 = _el$130.firstChild, _el$132 = _el$131.firstChild, _el$133 = _el$132.nextSibling, _el$134 = _el$133.firstChild, _el$135 = _el$131.nextSibling, _el$136 = _el$135.firstChild, _el$137 = _el$136.firstChild, _el$138 = _el$136.nextSibling, _el$139 = _el$138.firstChild;
-                      web.insert(_el$132, () => u.label);
-                      web.insert(_el$133, () => u.group, _el$134);
-                      web.insert(_el$133, () => resetIn(u.resetAt, now()), null);
-                      web.insert(_el$138, () => u.percent, _el$139);
+                      var _el$136 = _tmpl$30(), _el$137 = _el$136.firstChild, _el$138 = _el$137.firstChild, _el$139 = _el$138.nextSibling, _el$140 = _el$139.firstChild, _el$141 = _el$137.nextSibling, _el$142 = _el$141.firstChild, _el$143 = _el$142.firstChild, _el$144 = _el$142.nextSibling, _el$145 = _el$144.firstChild;
+                      web.insert(_el$138, () => u.label);
+                      web.insert(_el$139, () => u.group, _el$140);
+                      web.insert(_el$139, () => resetIn(u.resetAt, now()), null);
+                      web.insert(_el$144, () => u.percent, _el$145);
                       web.effect((_p$) => {
-                        var _v$83 = i() === 0 ? "none" : `1px solid ${T.border}`, _v$84 = T.faint, _v$85 = T.layer2, _v$86 = `${Math.max(0, Math.min(100, u.percent))}%`, _v$87 = barColor(u.percent), _v$88 = u.percent >= 20 ? T.base : T.red, _v$89 = `12px ${T.mono}`;
-                        _v$83 !== _p$.e && web.setStyleProperty(_el$130, "border-top", _p$.e = _v$83);
-                        _v$84 !== _p$.t && web.setStyleProperty(_el$133, "color", _p$.t = _v$84);
-                        _v$85 !== _p$.a && web.setStyleProperty(_el$136, "background", _p$.a = _v$85);
-                        _v$86 !== _p$.o && web.setStyleProperty(_el$137, "width", _p$.o = _v$86);
-                        _v$87 !== _p$.i && web.setStyleProperty(_el$137, "background", _p$.i = _v$87);
-                        _v$88 !== _p$.n && web.setStyleProperty(_el$138, "color", _p$.n = _v$88);
-                        _v$89 !== _p$.s && web.setStyleProperty(_el$138, "font", _p$.s = _v$89);
+                        var _v$88 = i() === 0 ? "none" : `1px solid ${T.border}`, _v$89 = T.faint, _v$90 = T.layer2, _v$91 = `${Math.max(0, Math.min(100, u.percent))}%`, _v$92 = barColor(u.percent), _v$93 = u.percent >= 20 ? T.base : T.red, _v$94 = `12px ${T.mono}`;
+                        _v$88 !== _p$.e && web.setStyleProperty(_el$136, "border-top", _p$.e = _v$88);
+                        _v$89 !== _p$.t && web.setStyleProperty(_el$139, "color", _p$.t = _v$89);
+                        _v$90 !== _p$.a && web.setStyleProperty(_el$142, "background", _p$.a = _v$90);
+                        _v$91 !== _p$.o && web.setStyleProperty(_el$143, "width", _p$.o = _v$91);
+                        _v$92 !== _p$.i && web.setStyleProperty(_el$143, "background", _p$.i = _v$92);
+                        _v$93 !== _p$.n && web.setStyleProperty(_el$144, "color", _p$.n = _v$93);
+                        _v$94 !== _p$.s && web.setStyleProperty(_el$144, "font", _p$.s = _v$94);
                         return _p$;
                       }, {
                         e: void 0,
@@ -1073,12 +1096,12 @@ const gui = gui$1.Plugin.define({
                         n: void 0,
                         s: void 0
                       });
-                      return _el$130;
+                      return _el$136;
                     })()
                   });
                 }
               }), null);
-              web.insert(_el$88, web.createComponent(solidJs.Show, {
+              web.insert(_el$94, web.createComponent(solidJs.Show, {
                 get when() {
                   return web.memo(() => {
                     var _a;
@@ -1086,24 +1109,24 @@ const gui = gui$1.Plugin.define({
                   })() && busy() !== "usage";
                 },
                 get children() {
-                  var _el$89 = _tmpl$15(), _el$90 = _el$89.firstChild, _el$91 = _el$90.nextSibling;
-                  web.insert(_el$89, () => activeAccount().usageError, _el$91);
+                  var _el$95 = _tmpl$15(), _el$96 = _el$95.firstChild, _el$97 = _el$96.nextSibling;
+                  web.insert(_el$95, () => activeAccount().usageError, _el$97);
                   web.effect((_p$) => {
-                    var _v$61 = `1px solid ${T.border}`, _v$62 = T.yellow, _v$63 = T.faint;
-                    _v$61 !== _p$.e && web.setStyleProperty(_el$89, "border-top", _p$.e = _v$61);
-                    _v$62 !== _p$.t && web.setStyleProperty(_el$89, "color", _p$.t = _v$62);
-                    _v$63 !== _p$.a && web.setStyleProperty(_el$91, "color", _p$.a = _v$63);
+                    var _v$66 = `1px solid ${T.border}`, _v$67 = T.yellow, _v$68 = T.faint;
+                    _v$66 !== _p$.e && web.setStyleProperty(_el$95, "border-top", _p$.e = _v$66);
+                    _v$67 !== _p$.t && web.setStyleProperty(_el$95, "color", _p$.t = _v$67);
+                    _v$68 !== _p$.a && web.setStyleProperty(_el$97, "color", _p$.a = _v$68);
                     return _p$;
                   }, {
                     e: void 0,
                     t: void 0,
                     a: void 0
                   });
-                  return _el$89;
+                  return _el$95;
                 }
               }), null);
-              web.effect((_$p) => web.style(_el$88, card, _$p));
-              return _el$88;
+              web.effect((_$p) => web.style(_el$94, card, _$p));
+              return _el$94;
             })()]
           }), null);
           web.effect((_p$) => {
@@ -1174,6 +1197,7 @@ const gui = gui$1.Plugin.define({
         autoApproveNative: settings2.autoApproveNative,
         acpIdleMinutes: settings2.acpIdleMinutes,
         acpMaxSessions: settings2.acpMaxSessions,
+        contextWindow: settings2.contextWindow,
         nextAccountId: accounts$1.pickAccount(data).id,
         accounts: enriched
       };
@@ -1291,6 +1315,15 @@ const gui = gui$1.Plugin.define({
         providerSettings.writeSettings({
           acpIdleMinutes: idle,
           acpMaxSessions: max
+        });
+        return true;
+      },
+      setContextWindow: async ({
+        tokens
+      }) => {
+        const next = tokens >= 9e5 ? 983040 : 256e3;
+        providerSettings.writeSettings({
+          contextWindow: next
         });
         return true;
       },

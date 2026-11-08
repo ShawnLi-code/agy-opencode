@@ -53,6 +53,7 @@
     "check:stop-live": "bun scripts/check-stop-live.mjs",
     "check:failure-live": "bun scripts/check-failure-live.mjs",
     "check:acceptance": "bun scripts/check-acceptance.mjs",
+    "patch:agy": "powershell -ExecutionPolicy Bypass -File scripts/ensure-agy-context.ps1",
     "check:config": "node scripts/config-check.mjs",
     "check": "npm run check:protocol && npm run check:gui",
     "prepublishOnly": "npm run build"

@@ -814,6 +814,39 @@ export default Plugin.define({
 
                     <div style={row}>
                       <div>
+                        <div style={{ "font-size": "12.5px" }}>上下文窗口</div>
+                        <div style={{ color: T.faint, "font-size": "11px", "margin-top": "2px" }}>
+                          1M 需要先给 agy 打补丁；官方二进制只支持 256K
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", "align-items": "center", gap: "8px", "justify-self": "start" }}>
+                        <select
+                          value={(data().contextWindow ?? 256000) >= 900000 ? "983040" : "256000"}
+                          onChange={(e) => {
+                            void run(
+                              "context-window",
+                              () => client.setContextWindow({ tokens: Number(e.currentTarget.value) }),
+                              "已保存，重载插件后生效",
+                            );
+                          }}
+                          style={{
+                            "font-size": "12px",
+                            padding: "5px 8px",
+                            "border-radius": "6px",
+                            border: `1px solid ${T.border}`,
+                            background: T.layer1,
+                            color: T.base,
+                            outline: "none",
+                          }}
+                        >
+                          <option value="256000">256K（官方）</option>
+                          <option value="983040">1M（已打补丁）</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div style={row}>
+                      <div>
                         <div style={{ "font-size": "12.5px" }}>空闲回收</div>
                         <div style={{ color: T.faint, "font-size": "11px", "margin-top": "2px" }}>
                           超时后关闭 worker，回来时自动恢复上下文
@@ -1058,6 +1091,7 @@ export default Plugin.define({
         autoApproveNative: settings.autoApproveNative,
         acpIdleMinutes: settings.acpIdleMinutes,
         acpMaxSessions: settings.acpMaxSessions,
+        contextWindow: settings.contextWindow,
         nextAccountId: accounts.pickAccount(data).id,
         accounts: enriched,
       };
@@ -1162,6 +1196,15 @@ export default Plugin.define({
         const idle = Math.max(1, Math.min(1440, Math.round(idleMinutes)));
         const max = Math.max(1, Math.min(16, Math.round(maxSessions)));
         providerSettings.writeSettings({ acpIdleMinutes: idle, acpMaxSessions: max });
+        return true;
+      },
+
+      setContextWindow: async ({ tokens }) => {
+        // Only the two windows agy can actually run at: the official cap and
+        // the patched cap. Anything else would make opencode send context the
+        // CLI then truncates.
+        const next = tokens >= 900_000 ? 983_040 : 256_000;
+        providerSettings.writeSettings({ contextWindow: next });
         return true;
       },
 

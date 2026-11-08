@@ -49,6 +49,8 @@ export const StateSchema = Effect.Schema.Struct({
   autoApproveNative: Effect.Schema.Boolean,
   acpIdleMinutes: Effect.Schema.Number,
   acpMaxSessions: Effect.Schema.Number,
+  /** Context window advertised to opencode; 256K official, 983,040 with the binary patch. */
+  contextWindow: Effect.Schema.Number,
   nextAccountId: Effect.Schema.String,
   accounts: Effect.Schema.Array(AccountSchema),
 });
@@ -86,6 +88,11 @@ export const AgyAccounts = Ipc.define({
         idleMinutes: Effect.Schema.Number,
         maxSessions: Effect.Schema.Number,
       }),
+      output: Effect.Schema.Boolean,
+    },
+    /** Context window advertised to opencode (256K official / 983,040 patched). */
+    setContextWindow: {
+      input: Effect.Schema.Struct({ tokens: Effect.Schema.Number }),
       output: Effect.Schema.Boolean,
     },
     /** Clear a cooldown so the account is used again immediately. */

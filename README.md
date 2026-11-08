@@ -169,6 +169,24 @@ Desktop app → **Settings → Antigravity**:
 | Mirror replay is in-memory | Recorded outputs live for 15 minutes (max 500 entries). A replayed card older than that returns an explicit “output no longer held” result instead of re-running the command. |
 | One conversation key per chat | Sessions are keyed by the system prompt plus the first user message. Changing that prefix starts a new agy session. |
 | Worker lifetime | Idle workers are closed after 10 min (at most 3 open). Closing releases the process, not the conversation: the next message reloads the session with its history. Tune in Settings → Antigravity → 调用设置 (空闲回收 / 进程上限), or with `AGY_ACP_IDLE_MS`, `AGY_ACP_MAX_SESSIONS`, `AGY_ACP_KEEP_SESSIONS`, `AGY_ACP_SWEEP_MS`. |
+| 1M context needs the patch | The official agy binary enforces 256K and its `--settings contextWindow` rejects every numeric value. 1M requires the bundled `agy-patch.py`; the settings page selector only tells opencode which window to budget for. |
+
+### 1M context (unofficial)
+
+`npm run patch:agy` verifies or applies the patch; `-CheckOnly` only reports.
+The helper stops a running agy (Windows locks its image), patches a temporary
+copy, swaps it in, and keeps `agy.exe.bak`. **After every `agy update`** the
+official binary replaces the patched one: re-run the helper and restart the
+CLI/OpenCode. To automate that on logon:
+
+```powershell
+schtasks /Create /TN "agy-context-patch" /SC ONLOGON /RL LIMITED /TR ^
+  "powershell -ExecutionPolicy Bypass -File %USERPROFILE%\.config\opencode\pkgs\agy-opencode\scripts\ensure-agy-context.ps1"
+```
+
+Caveats: the patch affects every consumer of that binary (agy CLI and any other
+tool using it, not only OpenCode), invalidates the Windows signature, and cannot
+be applied while agy is running.
 
 ---
 

@@ -20,6 +20,7 @@ import { buildPrompt, parseReply, type OpenAIMessage, type OpenAITool, type Pars
 import { acpPool, type AcpTurnResult, type AcpUsage } from "./acp";
 import { ToolBridge, toBridgeResult } from "./tool-bridge";
 import { DEFAULT_TURN_LIMITS, TurnSafety } from "./turn-safety";
+import { MODEL_TO_TIER } from "../tiers";
 
 /** The fields both the MCP bridge and native replay expose to the wire. */
 interface EmittedToolCall {
@@ -973,7 +974,8 @@ export async function startProvider(options: ProviderServerOptions = {}): Promis
 
         let rawReply: string;
         try {
-          rawReply = await run!(model ?? "", buildPrompt(messages, argonPrintFallback ? [] : tools));
+          const tierForRun = MODEL_TO_TIER[model ?? ""] ?? model ?? "";
+          rawReply = await run!(tierForRun, buildPrompt(messages, argonPrintFallback ? [] : tools));
         } catch (err: any) {
           json(res, 502, {
             error: {

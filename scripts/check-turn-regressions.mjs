@@ -480,7 +480,7 @@ try {
         body: JSON.stringify({ model: "gemini-4-argon-medium", messages: [{ role: "user", content: "hi" }], tools: [{ function: { name: "read" } }] }), signal: AbortSignal.timeout(3000) });
       assert.equal(r.status, 200);
       assert.equal((await r.json()).choices[0].message.content, "ARGON OK");
-      assert.equal(calls[0].model, "gemini-4-argon-medium");
+      assert.equal(calls[0].model, "argon-4-med", "print runner takes tier names, not agy model slugs");
       assert.ok(!calls[0].prompt.includes('"name":"read"'), "native fallback must not forward opencode tool schemas");
     } finally { await native.close(); }
 

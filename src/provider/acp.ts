@@ -504,6 +504,8 @@ class AcpClient {
       child.stdin.on("error", (error) => {
         if (this.child !== child || this.closed) return;
         this.closed = true;
+        // Allow the next turn to spawn a replacement worker.
+        this.ready = null;
         for (const [, pending] of this.pending) pending.reject(error);
         this.pending.clear();
       });
@@ -511,7 +513,12 @@ class AcpClient {
         // A previous process can exit after a replacement has started. Its
         // exit must not close the new connection or reject its requests.
         if (this.child !== child) return;
+        this.child = null;
         this.closed = true;
+        // An externally killed agy must not leave this client permanently
+        // dead: the next turn respawns, and the pool reloads or rebuilds its
+        // sessions from the caller's transcript.
+        this.ready = null;
         for (const [, p] of this.pending) p.reject(new Error(`agy acp exited (code ${code}, signal ${signal})`));
         this.pending.clear();
       });

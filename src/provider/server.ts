@@ -1003,7 +1003,9 @@ export async function startProvider(options: ProviderServerOptions = {}): Promis
       try {
         candidate.close();
       } catch {}
-      if (err?.code !== "EADDRINUSE" || attempt >= 0) throw err;
+      // Try a few neighbours before giving up: a previous instance that has not
+      // released the port yet must not leave the plugin with no bridge at all.
+      if (err?.code !== "EADDRINUSE" || attempt >= 5) throw err;
     }
   }
 
